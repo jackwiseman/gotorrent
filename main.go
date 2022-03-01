@@ -117,15 +117,14 @@ func scrape(conn net.Conn, torrent Torrent, cid uint64) {
 			panic(err)
 		}
 
-		infohash := []byte(torrent.hash) // doublecheck
-		packet_len := 16 + (20)
+		packet_len := 16 + len(torrent.info_hash) // this will always be 20, but will stay here for future scalability
 
 		packet := make([]byte, 16 + (20 ))
 		binary.BigEndian.PutUint64(packet[0:], cid)
 		binary.BigEndian.PutUint32(packet[8:], 2) // action 2 = scrape
 		binary.BigEndian.PutUint32(packet[12:], transaction_id)
-		
-		copy(packet[16:], infohash)
+
+		copy(packet[16:], torrent.info_hash)
 
 		conn.SetWriteDeadline(time.Now().Add(timeout))
 
@@ -148,8 +147,11 @@ func scrape(conn net.Conn, torrent Torrent, cid uint64) {
 				panic(err)
 			}
 		} else {
-			if bytes_read >= 8 + (12 * len(infohash)) {
-				fmt.Printf("Error: did not read correct # of bytes")
+			if bytes_read <= 16 {
+				fmt.Println("Error: did not read correct # of bytes")
+				fmt.Printf("\nGot %d bytes", bytes_read)
+				fmt.Println("Retrying...")
+
 			} else {
 				fmt.Println("Got something...")
 
@@ -159,21 +161,21 @@ func scrape(conn net.Conn, torrent Torrent, cid uint64) {
 				completed := binary.BigEndian.Uint32(buf[12:])
 				leechers := binary.BigEndian.Uint32(buf[16:])
 
-				fmt.Printf("Action: ", action)
-				fmt.Printf("Recieved Transaction ID: ", recieved_tid)
-				fmt.Printf("Seeders: ", seeders)
-				fmt.Printf("Completed: ", completed)
-				fmt.Printf("Leechers: ", leechers)
+				fmt.Println("\n-- Scrape Results --")
+				fmt.Printf("Action: %d", action)
+				fmt.Printf("\nRecieved Transaction ID: %d", recieved_tid)
+				fmt.Printf("\nSeeders: %d", seeders)
+				fmt.Printf("\nCompleted: %d", completed)
+				fmt.Printf("\nLeechers: %d\n", leechers)
 				break
 
 				}
 			}
 		}
-		fmt.Println("Retrying...")
 }
 
 func main() {
-	link := "magnet:?xt=urn:btih:e0974c84449826e34d8cc96c943cba2af18ab514&tr=https%3A%2F%2Facademictorrents.com%2Fannounce.php&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce"
+	link := "magnet:?xt=urn:btih:bdc0bb1499b1992a5488b4bbcfc9288c30793c08&tr=https%3A%2F%2Facademictorrents.com%2Fannounce.php&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce"
 	var torrent Torrent
 	torrent.magnet_link = link
 
@@ -183,6 +185,7 @@ func main() {
 	timeout := time.Second * 15
 
 	fmt.Println("Connecting...")
+
 	tracker := "tracker.opentrackr.org:1337"
 	//conn, err := net.DialTimeout("udp", torrent.trackers[1][6:], timeout)
 	conn, err := net.DialTimeout("udp", tracker, timeout)
@@ -192,5 +195,4 @@ func main() {
 
 	cid := get_connection_id(conn)
 	scrape(conn, torrent, cid)
-	fmt.Println(cid)
 }

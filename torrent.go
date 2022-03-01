@@ -9,7 +9,7 @@ import (
 type Torrent struct {
 	magnet_link string
 	display_name string
-	hash string
+	info_hash []byte
 	trackers []string
 }
 
@@ -37,7 +37,11 @@ func (torrent *Torrent) parse_magnet_link() {
 			}
 			torrent.trackers = append(torrent.trackers, tracker_link)
 		default:
-			torrent.hash = data[i][strings.LastIndex(data[i], ":")+1:]
+			hash, err := hex.DecodeString(data[i][strings.LastIndex(data[i], ":")+1:])
+			if err != nil {
+				panic(err)
+			}
+			torrent.info_hash = hash
 		}
 	}
 
@@ -46,7 +50,6 @@ func (torrent *Torrent) parse_magnet_link() {
 func (torrent Torrent) print_info() {
 	fmt.Println("Name: " + torrent.display_name)
 	fmt.Println("Magnet: " + torrent.magnet_link)
-	fmt.Println("Hash: " + torrent.hash)
 	fmt.Println("Trackers:")
 	for i := 0; i < len(torrent.trackers); i++ {
 		fmt.Println(" -- " + torrent.trackers[i])
