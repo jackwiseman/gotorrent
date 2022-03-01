@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 	"math"
+	"strconv"
 )
 
 type Connection_Request struct {
@@ -174,6 +175,113 @@ func scrape(conn net.Conn, torrent Torrent, cid uint64) {
 		}
 }
 
+// via BEP_15
+func announce(conn net.Conn, torrent Torrent, cid uint64) {
+timeout := time.Second * 15
+	retries := 8
+
+	for i := 0; i <= retries; i++ {
+		transaction_id, err := get_transaction_id(); if err != nil {
+			panic(err)
+		}
+
+		num_want := 10
+
+		// Create announce packet
+		packet := make([]byte, 98)
+		// connection_id
+		binary.BigEndian.PutUint64(packet[0:], cid)
+		// action
+		binary.BigEndian.PutUint32(packet[8:], 1)
+		// transaction_id
+		binary.BigEndian.PutUint32(packet[12:], transaction_id)
+		// info_hash
+		copy(packet[16:], torrent.info_hash)
+		// peer_id (20 bytes)
+		peer_id := "GoLangTorrent_v0.0.1"
+		copy(packet[36:], []byte(peer_id)) // not sure if this will even be accepted
+		// downloaded
+		binary.BigEndian.PutUint64(packet[56:], 0)
+		// left
+		binary.BigEndian.PutUint64(packet[64:], 0)
+		// uploaded
+		binary.BigEndian.PutUint64(packet[72:], 0)
+		// event
+		binary.BigEndian.PutUint32(packet[80:], 0)
+		// ip_address
+		binary.BigEndian.PutUint32(packet[84:], 0)
+		// key
+		binary.BigEndian.PutUint32(packet[88:], 0)
+		// num_want
+		binary.BigEndian.PutUint32(packet[92:], uint32(num_want))
+		// port
+		binary.BigEndian.PutUint16(packet[96:], 6881)
+
+		// Set timeout
+		conn.SetWriteDeadline(time.Now().Add(timeout))
+
+		fmt.Println("Writing...")
+		bytes_written, err := conn.Write(packet); if err != nil {
+			panic(err)
+		}
+		if bytes_written < len(packet) {
+			panic("Error: did not write announce request")
+		}
+
+		buf := make([]byte, 20 + (6 * num_want))
+		// Per BitTorrent.org specificiations, "If a response is not recieved after 15 * 2 ^ n seconds, client should retransmit, where n increases to 8 from 0
+		conn.SetReadDeadline(time.Now().Add(time.Second * time.Duration(int(15 * math.Pow(2,float64(i))))))
+
+		fmt.Println("Reading...")
+		bytes_read, err := conn.Read(buf)
+		if err != nil {
+			if i == retries {
+				panic(err)
+			}
+		} else {
+			if bytes_read < 20 + (6 * num_want) {
+				fmt.Println("Error: did not read correct # of bytes")
+				fmt.Printf("\nGot %d bytes", bytes_read)
+				fmt.Println("Retrying...")
+
+			} else {
+				fmt.Println("Got something...")
+
+				action := binary.BigEndian.Uint32(buf[0:])
+				recieved_tid := binary.BigEndian.Uint32(buf[4:])
+				interval := binary.BigEndian.Uint32(buf[8:])
+				leechers := binary.BigEndian.Uint32(buf[12:])
+				seeders := binary.BigEndian.Uint32(buf[16:])
+
+				peers := make([][]string, 0) // likely should not always be a string
+				for j := 0; j < num_want; j++ {
+					ip_address_raw := binary.BigEndian.Uint32(buf[20 + (6 * j):])
+					port := binary.BigEndian.Uint16(buf[24 + (6 * j):])
+
+					// convert ip_address into a string representation
+					ip_address := make(net.IP, 4)
+					binary.BigEndian.PutUint32(ip_address, ip_address_raw)
+
+					new_peer := make([]string, 0)
+					new_peer = append(new_peer, ip_address.String(), strconv.Itoa(int(port)))
+					peers = append(peers, new_peer)
+				}
+
+				fmt.Println("\n-- Scrape Results --")
+				fmt.Printf("Action: %d", action)
+				fmt.Printf("\nRecieved Transaction ID: %d", recieved_tid)
+				fmt.Printf("\nInterval: %d", interval)
+				fmt.Printf("\nLeechers: %d\n", leechers)
+				fmt.Printf("\nSeeders: %d", seeders)
+				fmt.Printf("\nPeers: ")
+				fmt.Println(peers)
+				break
+
+				}
+			}
+		}
+}
+
 func main() {
 	link := "magnet:?xt=urn:btih:bdc0bb1499b1992a5488b4bbcfc9288c30793c08&tr=https%3A%2F%2Facademictorrents.com%2Fannounce.php&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce"
 	var torrent Torrent
@@ -193,6 +301,7 @@ func main() {
 		panic(err)
 	}
 
-	cid := get_connection_id(conn)
+	cid := get_connection_id(conn) // needs to be regenerated every 2 minutes
 	scrape(conn, torrent, cid)
+	announce(conn, torrent, cid)
 }
