@@ -8,7 +8,7 @@ import (
 	"time"
 	"math"
 	"strconv"
-//	"io"
+	"io"
 )
 
 type Connection_Request struct {
@@ -187,7 +187,7 @@ func announce(conn net.Conn, torrent Torrent, cid uint64) ([][]string) {
 			panic(err)
 		}
 
-		num_want := 10
+		num_want := 20
 
 		// Create announce packet
 		packet := make([]byte, 98)
@@ -283,15 +283,17 @@ func announce(conn net.Conn, torrent Torrent, cid uint64) ([][]string) {
 	return peers
 }
 
-func handshake(peer []string, torrent Torrent) {
-	timeout := 15 * time.Second
+func handshake(peer []string, torrent Torrent) (bool) {
+	timeout := 3 * time.Second
 
-	fmt.Printf("Performing handshake to %s:%s\n", peer[0], peer[1])
-	fmt.Println("Connecting...")
+	fmt.Printf("Attempting handshake to %s:%s\n", peer[0], peer[1])
+
 	conn, err := net.DialTimeout("tcp", peer[0] + ":" + peer[1], timeout)
 	if err != nil {
-		panic(err)
+		return false
 	}
+
+	defer conn.Close()
 
 	// Create handshake message
 	pstrlen := 19
@@ -300,32 +302,48 @@ func handshake(peer []string, torrent Torrent) {
 	handshake := make([]byte, 49 + pstrlen)
 	copy(handshake[0:], []byte([]uint8{uint8(pstrlen)}))
 	copy(handshake[1:], []byte(pstr))
+	handshake[25] = 16 // we need to demonstrate that this client supports extended messages, so we set the 20th bit (big endian) to 1
 	copy(handshake[28:], torrent.info_hash)
-	peer_id := "GoLangTorrent_v0.0.1"
+	peer_id := "GoLangTorrent_v0.0.1" // TODO: generate a random peer_id?
 	copy(handshake[48:], []byte(peer_id))
 
-	fmt.Println("Writing...")
-	fmt.Println(handshake)
-	bytes_written, err := conn.Write(handshake); if err != nil {
-		panic(err)
-	}
-	if bytes_written < 49 + pstrlen {
-		panic("Error: did not write handshake")
+	// Write to peer
+	bytes_written, err := conn.Write(handshake)
+	if err != nil || bytes_written < 49 + pstrlen {
+		return false
 	}
 
-	conn.SetReadDeadline(time.Now().Add(timeout))
-
-	fmt.Println("Reading...")
-
+	// Read from peer
 	buf := make([]byte, 49 + pstrlen) // should probably be longer, but for now I'll assume all will use the default pstrlen = 19 for 'BitTorrent protocol'
 	_, err = conn.Read(buf)
+
 	if err != nil {
-		panic(err)
+		return false
 	}
 
-	conn.Close()
-	fmt.Println(string(buf[1:20])) // should be 'BitTorrent protocol'
-	fmt.Println(string(buf[48:])) // should be peer id
+	// if the peer utilizes extended messages (most likely), we next need to send an extended handshake, mostly just for getting metadata
+	if buf[25] & 0x10 == 16 {
+		fmt.Println("Peer supports extended messaging, performing extended message handshake")
+		packet := get_handshake_message()
+
+		bytes_written, err := conn.Write(packet)
+		if err != nil || bytes_written < len(packet) {
+			return false
+		}
+
+		buf = make([]byte, 2048) // we don't know how many different extensions the peer's client will have
+		_, err = conn.Read(buf)
+		if err != io.EOF && err != nil {
+			panic(err)
+		}
+
+		message_length := binary.BigEndian.Uint32(buf[0:])
+		//bittorrent_message_id := buf[4]
+		//extended_message_id := buf[5]
+		decode_handshake(buf[6:6+message_length])
+	} else {
+		fmt.Println("Peer does not support extended messaging")
+	return true
 }
 
 func main() {
@@ -336,25 +354,29 @@ func main() {
 	torrent.parse_magnet_link()
 	torrent.print_info()
 
-//	timeout := time.Second * 15
+	timeout := time.Second * 15
 
 //	fmt.Println("Connecting...")
 
-//	tracker := "tracker.opentrackr.org:1337"
-	//conn, err := net.DialTimeout("udp", torrent.trackers[1][6:], timeout)
-	//conn, err := net.DialTimeout("udp", tracker, timeout)
-	//if err != nil {
-//		panic(err)
-	//}
+	tracker := "tracker.opentrackr.org:1337"
+//	conn, err := net.DialTimeout("udp", torrent.trackers[1][6:], timeout)
+	conn, err := net.DialTimeout("udp", tracker, timeout)
+	if err != nil {
+		panic(err)
+	}
 
-	//cid := get_connection_id(conn) // needs to be regenerated every 2 minutes
+	cid := get_connection_id(conn) // needs to be regenerated every 2 minutes
 	//scrape(conn, torrent, cid)
-	//peers := announce(conn, torrent, cid)
+	peers := announce(conn, torrent, cid)
 
 	// close connection to tracker
-//	conn.Close()
+	conn.Close()
 
-	// now that we have our list of peers, lets perform a handshake with one
-	handshake(torrent)
+	// now that we have our list of peers, lets attempt a handshake until we establish connection with one 
 
+	for i := 0; i < len(peers); i++ {
+		if handshake(peers[i], torrent) {
+			break
+		}
+	}
 }
