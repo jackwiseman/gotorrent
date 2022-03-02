@@ -8,6 +8,7 @@ import (
 	"time"
 	"math"
 	"strconv"
+//	"io"
 )
 
 type Connection_Request struct {
@@ -109,7 +110,6 @@ func get_connection_id(conn net.Conn) (uint64) {
 }
 
 func scrape(conn net.Conn, torrent Torrent, cid uint64) {
-
 	timeout := time.Second * 15
 	retries := 8
 
@@ -170,15 +170,17 @@ func scrape(conn net.Conn, torrent Torrent, cid uint64) {
 				fmt.Printf("\nLeechers: %d\n", leechers)
 				break
 
-				}
 			}
 		}
+	}
 }
 
 // via BEP_15
-func announce(conn net.Conn, torrent Torrent, cid uint64) {
-timeout := time.Second * 15
+// TODO: Error handling for no peers found
+func announce(conn net.Conn, torrent Torrent, cid uint64) ([][]string) {
+	timeout := time.Second * 15
 	retries := 8
+	peers := make([][]string, 0) // likely should not always be a string
 
 	for i := 0; i <= retries; i++ {
 		transaction_id, err := get_transaction_id(); if err != nil {
@@ -253,7 +255,6 @@ timeout := time.Second * 15
 				leechers := binary.BigEndian.Uint32(buf[12:])
 				seeders := binary.BigEndian.Uint32(buf[16:])
 
-				peers := make([][]string, 0) // likely should not always be a string
 				for j := 0; j < num_want; j++ {
 					ip_address_raw := binary.BigEndian.Uint32(buf[20 + (6 * j):])
 					port := binary.BigEndian.Uint16(buf[24 + (6 * j):])
@@ -267,7 +268,7 @@ timeout := time.Second * 15
 					peers = append(peers, new_peer)
 				}
 
-				fmt.Println("\n-- Scrape Results --")
+				fmt.Println("\n-- Announce Results --")
 				fmt.Printf("Action: %d", action)
 				fmt.Printf("\nRecieved Transaction ID: %d", recieved_tid)
 				fmt.Printf("\nInterval: %d", interval)
@@ -276,10 +277,55 @@ timeout := time.Second * 15
 				fmt.Printf("\nPeers: ")
 				fmt.Println(peers)
 				break
-
-				}
 			}
 		}
+	}
+	return peers
+}
+
+func handshake(peer []string, torrent Torrent) {
+	timeout := 15 * time.Second
+
+	fmt.Printf("Performing handshake to %s:%s\n", peer[0], peer[1])
+	fmt.Println("Connecting...")
+	conn, err := net.DialTimeout("tcp", peer[0] + ":" + peer[1], timeout)
+	if err != nil {
+		panic(err)
+	}
+
+	// Create handshake message
+	pstrlen := 19
+	pstr := "BitTorrent protocol"
+
+	handshake := make([]byte, 49 + pstrlen)
+	copy(handshake[0:], []byte([]uint8{uint8(pstrlen)}))
+	copy(handshake[1:], []byte(pstr))
+	copy(handshake[28:], torrent.info_hash)
+	peer_id := "GoLangTorrent_v0.0.1"
+	copy(handshake[48:], []byte(peer_id))
+
+	fmt.Println("Writing...")
+	fmt.Println(handshake)
+	bytes_written, err := conn.Write(handshake); if err != nil {
+		panic(err)
+	}
+	if bytes_written < 49 + pstrlen {
+		panic("Error: did not write handshake")
+	}
+
+	conn.SetReadDeadline(time.Now().Add(timeout))
+
+	fmt.Println("Reading...")
+
+	buf := make([]byte, 49 + pstrlen) // should probably be longer, but for now I'll assume all will use the default pstrlen = 19 for 'BitTorrent protocol'
+	_, err = conn.Read(buf)
+	if err != nil {
+		panic(err)
+	}
+
+	conn.Close()
+	fmt.Println(string(buf[1:20])) // should be 'BitTorrent protocol'
+	fmt.Println(string(buf[48:])) // should be peer id
 }
 
 func main() {
@@ -290,18 +336,25 @@ func main() {
 	torrent.parse_magnet_link()
 	torrent.print_info()
 
-	timeout := time.Second * 15
+//	timeout := time.Second * 15
 
-	fmt.Println("Connecting...")
+//	fmt.Println("Connecting...")
 
-	tracker := "tracker.opentrackr.org:1337"
+//	tracker := "tracker.opentrackr.org:1337"
 	//conn, err := net.DialTimeout("udp", torrent.trackers[1][6:], timeout)
-	conn, err := net.DialTimeout("udp", tracker, timeout)
-	if err != nil {
-		panic(err)
-	}
+	//conn, err := net.DialTimeout("udp", tracker, timeout)
+	//if err != nil {
+//		panic(err)
+	//}
 
-	cid := get_connection_id(conn) // needs to be regenerated every 2 minutes
-	scrape(conn, torrent, cid)
-	announce(conn, torrent, cid)
+	//cid := get_connection_id(conn) // needs to be regenerated every 2 minutes
+	//scrape(conn, torrent, cid)
+	//peers := announce(conn, torrent, cid)
+
+	// close connection to tracker
+//	conn.Close()
+
+	// now that we have our list of peers, lets perform a handshake with one
+	handshake(torrent)
+
 }
