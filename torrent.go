@@ -10,9 +10,20 @@ type Torrent struct {
 	magnet_link string
 	display_name string
 	info_hash []byte
-	trackers []string
+	trackers []Tracker
+	metadata_size int // in bytes
+	peers []Peer
 }
 
+// for simplicity, only magnet links will be supported for now
+func new_torrent(magnet_link string) (*Torrent) {
+	var torrent Torrent
+	torrent.magnet_link = magnet_link
+	torrent.parse_magnet_link()
+	return &torrent
+}
+
+// only supporting udp links
 func (torrent *Torrent) parse_magnet_link() {
 	data := strings.Split(torrent.magnet_link, "&")
 	for i := 0; i < len(data); i++ {
@@ -35,7 +46,13 @@ func (torrent *Torrent) parse_magnet_link() {
 				}
 			index++
 			}
-			torrent.trackers = append(torrent.trackers, tracker_link)
+			if tracker_link[0:3] == "udp" {
+				if strings.Contains(tracker_link, "announce") {
+					tracker_link = tracker_link[:len(tracker_link) - len("/announce")]
+				}
+				new_tracker := new_tracker(tracker_link[6:])
+				torrent.trackers = append(torrent.trackers, *new_tracker)
+			}
 		default:
 			hash, err := hex.DecodeString(data[i][strings.LastIndex(data[i], ":")+1:])
 			if err != nil {
@@ -52,7 +69,38 @@ func (torrent Torrent) print_info() {
 	fmt.Println("Magnet: " + torrent.magnet_link)
 	fmt.Println("Trackers:")
 	for i := 0; i < len(torrent.trackers); i++ {
-		fmt.Println(" -- " + torrent.trackers[i])
+		fmt.Println(" -- " + torrent.trackers[i].link)
+	}
+	fmt.Println("Known peers:")
+	if len(torrent.peers) == 0 {
+		fmt.Println(" -- None")
+	} else {
+		for i := 0; i < len(torrent.peers); i++ {
+			fmt.Println(" -- " + torrent.peers[i].ip)
+		}
+	}
+}
+
+func (torrent *Torrent) find_peers() {
+	for i := 0; i < len(torrent.trackers); i++ {
+		fmt.Println("Connecting to " + torrent.trackers[i].link)
+
+		err := torrent.trackers[i].connect()
+		if err != nil {
+			continue
+		}
+
+		torrent.trackers[i].set_connection_id()
+		if err != nil {
+			continue
+		}
+
+		torrent.trackers[i].announce(torrent)
+		if err != nil {
+			continue
+		}
+
+		torrent.trackers[i].disconnect()
 	}
 }
 
