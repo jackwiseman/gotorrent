@@ -5,6 +5,7 @@ import(
 	"fmt"
 	bencode "github.com/jackpal/bencode-go"
 	"bytes"
+	"strconv"
 )
 
 type message_id uint8
@@ -41,23 +42,57 @@ type ExtendedMessagePayload struct {
 	Reqq int // number of outstanding request messages this client supports
 }
 
-func decode_handshake(payload []byte) { // not sure what to do with result yet, no return value
+type Metadata_Request struct {
+	Msg_type int "msg_type"
+	Piece int "piece"
+}
+
+type Metadata_Response struct {
+	Msg_type int
+	Piece int
+	Total_size int
+}
+
+
+func encode_metadata_request(piece_number int) (string) {
+	var b bytes.Buffer
+	var data Metadata_Request
+	data.Msg_type = 0
+	data.Piece = piece_number
+	bencode.Marshal(&b, data)
+	fmt.Println(b.String())
+	return b.String()
+}
+
+func decode_metadata_request(payload []byte) {
+	var result = Metadata_Response{0, 0, 0}
+	reader := bytes.NewReader([]byte(payload))
+	bencode.Unmarshal(reader, &result)
+	fmt.Println("Response: {'msg_type': " + strconv.Itoa(result.Msg_type) + ", 'piece': " + strconv.Itoa(result.Msg_type) + "}")
+	fmt.Println("Raw:")
+	fmt.Println(result)
+}
+
+func decode_handshake(payload []byte) (*ExtendedMessagePayload) { // not sure what to do with result yet, no return value
 	var result = ExtendedMessagePayload{nil, "v", 0, 0, 0}
 	//var result = make([]ExtendedMessagePayload, 0)
 	reader := bytes.NewReader([]byte(payload))
 	bencode.Unmarshal(reader, &result)
-	fmt.Println(result)
+	//fmt.Println(result)
+	return &result
 }
 
 func get_handshake_message() ([]byte) {
 	// <message_len><message_id == 20><handshake_identifier == 0><payload>
-	payload_raw := "dut_metadata:1e" // bencoded dict setting metadata to 1, as this is the only thing we should support
+	payload_raw := "d11:ut_metadatai1ee" // bencoded dict setting metadata to 1, as this is the only thing we should support
 	payload := []byte(payload_raw)
-	message_len := uint32(len(payload))
+//	message_len := uint32(len(payload))
+	message_len := uint32(len(payload) + 2)
 
-	packet := make([]byte, message_len + 6) // 4 from length, 2 from message id and extended message id
-	fmt.Println("Message length:")
-	fmt.Println(message_len)
+	packet := make([]byte, message_len + 4)
+//	packet := make([]byte, message_len + 6) // 4 from length, 2 from message id and extended message id
+//	fmt.Println("Message length:")
+//	fmt.Println(message_len)
 	binary.BigEndian.PutUint32(packet[0:], message_len)
 	copy(packet[4:], []byte([]uint8{uint8(EXTENDED)}))
 	copy(packet[5:], []byte([]uint8{uint8(0)}))

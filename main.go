@@ -6,8 +6,10 @@ func main() {
 	torrent := new_torrent(link)
 
 	torrent.find_peers()
-	torrent.print_info()
+//	torrent.print_info()
 
+	torrent.get_metadata()
+	torrent.print_info()
 
 	// now that we have our list of peers, lets attempt a handshake until we establish connection with one 
 

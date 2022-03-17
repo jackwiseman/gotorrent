@@ -1,11 +1,14 @@
 package main
 
 import (
+	"strconv"
+	"strings"
 	"net"
 	"time"
 	"errors"
 	"io"
 	"fmt"
+	"math"
 	"encoding/binary"
 )
 
@@ -42,10 +45,12 @@ func (peer *Peer) connect() (error) {
 }
 
 func (peer *Peer) disconnect() {
-	peer.conn.Close()
+	if peer.conn != nil { // need to look into this, also keeping it open
+		peer.conn.Close()
+	}
 }
 
-func (peer *Peer) perform_handshake (torrent Torrent) (error) {
+func (peer *Peer) perform_handshake (torrent *Torrent) (error) {
 	if peer.conn == nil {
 		return errors.New("Error: peer's connection is nil")
 	}
@@ -81,7 +86,7 @@ func (peer *Peer) perform_handshake (torrent Torrent) (error) {
 	// if the peer utilizes extended messages (most likely), we next need to send an extended handshake, mostly just for getting metadata
 	if buf[25] & 0x10 == 16 {
 		peer.uses_extended = true
-		fmt.Println("Peer supports extended messaging, performing extended message handshake")
+		//fmt.Println("Peer supports extended messaging, performing extended message handshake")
 		packet := get_handshake_message()
 
 		bytes_written, err := peer.conn.Write(packet)
@@ -99,9 +104,77 @@ func (peer *Peer) perform_handshake (torrent Torrent) (error) {
 		message_length := binary.BigEndian.Uint32(buf[0:])
 		//bittorrent_message_id := buf[4]
 		//extended_message_id := buf[5]
-		decode_handshake(buf[6:6+message_length])
+		result := decode_handshake(buf[6:6+message_length])
+		peer.set_extensions(result.M)
+
+		if result.Metadata_size != 0 {
+			torrent.metadata_size = result.Metadata_size
+			torrent.metadata_pieces = int(math.Round(float64(torrent.metadata_size)/float64(16384) + 1.0))
+		//	fmt.Println("Metadata size:")
+		//	fmt.Println(torrent.metadata_size)
+		//	fmt.Println("Pieces: ")
+		//	fmt.Println(int(math.Round(float64(torrent.metadata_size)/float64(16384) + 1.0))) // this is not correct
+		}
 	} else {
-		fmt.Println("Peer does not support extended messaging")
+		//fmt.Println("Peer does not support extended messaging")
 	}
 	return nil
+}
+
+func (peer *Peer) request_metadata(piece_num int) (bool, []byte) {
+	//	build the request packet
+	//	<len><id-20><extension-id><payload>
+	payload := []byte(encode_metadata_request(piece_num))
+	msg_len := len(payload) + 2
+	packet := make([]byte, msg_len + 4) //payload + 2 * uint8 and 1 * uint32
+	binary.BigEndian.PutUint32(packet[0:], uint32(msg_len))
+	copy(packet[4:], []byte([]uint8{uint8(20)}))
+	metadata_id := uint8(peer.extensions["ut_metadata"])
+	copy(packet[5:], []byte([]uint8{metadata_id}))
+	copy(packet[6:], payload)
+
+	bytes_written, err := peer.conn.Write(packet)
+	if err != nil || bytes_written < len(packet) {
+		peer.is_alive = false
+		fmt.Println(errors.New("Error: unable to write to peer"))
+	}
+
+	buf := make([]byte, 0, 20000) // big buffer
+	tmp := make([]byte, 256)     // using small tmo buffer for demonstrating
+
+	read_start := time.Now().Add(time.Second * 15)
+	var response_len uint32
+
+	peer.conn.SetReadDeadline(time.Second * 5)
+
+	for {
+		n, err := peer.conn.Read(tmp)
+		if err != nil {
+			if err != io.EOF {
+				fmt.Println("read error:", err)
+			}
+			//return false, nil
+			break
+		}
+		fmt.Println("got", n, "bytes.")
+		if time.Now().After(read_start) {
+			break
+		}
+		buf = append(buf, tmp[:n]...)
+	}
+	fmt.Printf("? " + strconv.Itoa(len(buf)))
+	if len(buf) > 99 {
+		response_len := binary.BigEndian.Uint32(buf[0:])
+	//	response_id := buf[4]
+	//	response_extension := buf[5]
+		response_bencode_string := string(buf[0:100]) // only issue is if the 'ee' isnt found here
+		index := strings.Index(response_bencode_string, "ee")
+		if index == -1 {
+			return false, nil
+		}
+		bencode := response_bencode_string[6:index+2] // there's also a chance they don't have it
+		fmt.Println(bencode)
+		return true, buf[index+2:response_len]
+	}
+	return false, nil
 }
