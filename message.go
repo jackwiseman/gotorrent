@@ -60,7 +60,7 @@ func encode_metadata_request(piece_number int) (string) {
 	data.Msg_type = 0
 	data.Piece = piece_number
 	bencode.Marshal(&b, data)
-	fmt.Println(b.String())
+	//fmt.Println(b.String())
 	return b.String()
 }
 

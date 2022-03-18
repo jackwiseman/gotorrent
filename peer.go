@@ -110,10 +110,10 @@ func (peer *Peer) perform_handshake (torrent *Torrent) (error) {
 		if result.Metadata_size != 0 {
 			torrent.metadata_size = result.Metadata_size
 			torrent.metadata_pieces = int(math.Round(float64(torrent.metadata_size)/float64(16384) + 1.0))
-		//	fmt.Println("Metadata size:")
-		//	fmt.Println(torrent.metadata_size)
-		//	fmt.Println("Pieces: ")
-		//	fmt.Println(int(math.Round(float64(torrent.metadata_size)/float64(16384) + 1.0))) // this is not correct
+			//	fmt.Println("Metadata size:")
+			//	fmt.Println(torrent.metadata_size)
+			//	fmt.Println("Pieces: ")
+			//	fmt.Println(int(math.Round(float64(torrent.metadata_size)/float64(16384) + 1.0))) // this is not correct
 		}
 	} else {
 		//fmt.Println("Peer does not support extended messaging")
@@ -121,60 +121,87 @@ func (peer *Peer) perform_handshake (torrent *Torrent) (error) {
 	return nil
 }
 
-func (peer *Peer) request_metadata(piece_num int) (bool, []byte) {
-	//	build the request packet
-	//	<len><id-20><extension-id><payload>
-	payload := []byte(encode_metadata_request(piece_num))
-	msg_len := len(payload) + 2
-	packet := make([]byte, msg_len + 4) //payload + 2 * uint8 and 1 * uint32
-	binary.BigEndian.PutUint32(packet[0:], uint32(msg_len))
-	copy(packet[4:], []byte([]uint8{uint8(20)}))
-	metadata_id := uint8(peer.extensions["ut_metadata"])
-	copy(packet[5:], []byte([]uint8{metadata_id}))
-	copy(packet[6:], payload)
+func (peer *Peer) request_metadata(ch chan Metadata_Piece, pieces *[]int) /*(bool, []byte)*/ {
+	for need_piece(*pieces) {
+		curr_piece := get_rand_piece(*pieces)
 
-	bytes_written, err := peer.conn.Write(packet)
-	if err != nil || bytes_written < len(packet) {
-		peer.is_alive = false
-		fmt.Println(errors.New("Error: unable to write to peer"))
-	}
+		//	build the request packet
+		//	<len><id-20><extension-id><payload>
+		payload := []byte(encode_metadata_request(curr_piece))
+		msg_len := len(payload) + 2
+		packet := make([]byte, msg_len + 4) //payload + 2 * uint8 and 1 * uint32
+		binary.BigEndian.PutUint32(packet[0:], uint32(msg_len))
+		copy(packet[4:], []byte([]uint8{uint8(20)}))
+		metadata_id := uint8(peer.extensions["ut_metadata"])
+		copy(packet[5:], []byte([]uint8{metadata_id}))
+		copy(packet[6:], payload)
 
-	buf := make([]byte, 0, 20000) // big buffer
-	tmp := make([]byte, 256)     // using small tmo buffer for demonstrating
+		bytes_written, err := peer.conn.Write(packet)
+		if err != nil || bytes_written < len(packet) {
+			peer.is_alive = false
+			fmt.Println(errors.New("Error: unable to write to peer, here is the error dump:"))
+			fmt.Println(peer)
+			continue
+		}
 
-	read_start := time.Now().Add(time.Second * 15)
-	var response_len uint32
+		buf := make([]byte, 0, 19968) // big buffer
+		tmp := make([]byte, 256)     // using small tmo buffer for demonstrating
 
-	peer.conn.SetReadDeadline(time.Second * 5)
+		read_start := time.Now().Add(time.Second * 15)
+		var expected int
 
-	for {
-		n, err := peer.conn.Read(tmp)
-		if err != nil {
-			if err != io.EOF {
-				fmt.Println("read error:", err)
+		//	peer.conn.SetReadDeadline(time.Second * time.Duration(5))
+
+		for i := 0; i < 78; i++ {
+			n, err := peer.conn.Read(tmp)
+			if err != nil {
+				if err != io.EOF {
+					fmt.Println("read error:", err)
+				}
+				//return false, nil
+				break
 			}
-			//return false, nil
-			break
+
+			buf = append(buf, tmp[:n]...)
+//			fmt.Println("got", n, "bytes from " + peer.ip)
+
+			if i == 0 && len(tmp) == 256 {
+				response_bencode_string := string(buf[0:100]) // only issue is if the 'ee' isnt found here
+				start_index := strings.Index(response_bencode_string, "d")
+				if start_index == -1 {
+					continue
+				}
+				fmt.Println(response_bencode_string)
+				expected = int(binary.BigEndian.Uint32(buf[start_index - 6:]))
+			}
+			if i > 0 && len(buf) > 256 {
+//				fmt.Println(len(buf))
+//				fmt.Println(expected)
+				if len(buf) >= expected {
+					break
+				}
+			}
+			if time.Now().After(read_start) {
+				break
+			}
 		}
-		fmt.Println("got", n, "bytes.")
-		if time.Now().After(read_start) {
-			break
+		//fmt.Printf("? " + strconv.Itoa(len(buf)))
+		if len(buf) > 99 {
+			response_len := binary.BigEndian.Uint32(buf[0:])
+			//	response_id := buf[4]
+			//	response_extension := buf[5]
+			response_bencode_string := string(buf[0:100]) // only issue is if the 'ee' isnt found here
+			start_index := strings.Index(response_bencode_string, "d")
+			index := strings.Index(response_bencode_string, "ee")
+			if index == -1 || start_index == -1 {
+				continue
+			}
+			response_len = binary.BigEndian.Uint32(buf[start_index - 6:])
+			//bencode := response_bencode_string[start_index:index+2] // there's also a chance they don't have it
+			//fmt.Println("Bencode info: " + bencode)
+			fmt.Println("This piece is " + strconv.Itoa(len(buf[index+2:response_len+4])) + " bytes")
+			ch <- Metadata_Piece{curr_piece, buf[index+2:response_len+4]} // add 4 to the response len because it does not include the initial uint32
+			continue
 		}
-		buf = append(buf, tmp[:n]...)
 	}
-	fmt.Printf("? " + strconv.Itoa(len(buf)))
-	if len(buf) > 99 {
-		response_len := binary.BigEndian.Uint32(buf[0:])
-	//	response_id := buf[4]
-	//	response_extension := buf[5]
-		response_bencode_string := string(buf[0:100]) // only issue is if the 'ee' isnt found here
-		index := strings.Index(response_bencode_string, "ee")
-		if index == -1 {
-			return false, nil
-		}
-		bencode := response_bencode_string[6:index+2] // there's also a chance they don't have it
-		fmt.Println(bencode)
-		return true, buf[index+2:response_len]
-	}
-	return false, nil
 }

@@ -169,7 +169,7 @@ func (tracker *Tracker) announce(torrent *Torrent) (error) {
 			return(err)
 		}
 
-		num_want := 50
+		num_want := 100
 
 		// Create announce packet
 		packet := make([]byte, 98)
