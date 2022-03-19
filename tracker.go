@@ -169,7 +169,7 @@ func (tracker *Tracker) announce(torrent *Torrent) (error) {
 			return(err)
 		}
 
-		num_want := 100
+		num_want := torrent.max_peers
 
 		// Create announce packet
 		packet := make([]byte, 98)
