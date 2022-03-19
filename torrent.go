@@ -6,10 +6,14 @@ import (
 	"strings"
 	"strconv"
 	"encoding/hex"
-	//	"bytes"
 	"math/rand"
 	"time"
-	"sync"
+	"sync"	
+	"io/ioutil"
+	"bytes"
+
+	bencode "github.com/jackpal/bencode-go"
+
 )
 
 type Torrent struct {
@@ -21,6 +25,8 @@ type Torrent struct {
 	metadata_pieces int
 	metadata_raw []byte
 	peers []Peer
+	max_peers int
+	metadata Metadata
 }
 
 type Metadata_Piece struct {
@@ -29,9 +35,10 @@ type Metadata_Piece struct {
 }
 
 // for simplicity, only magnet links will be supported for now
-func new_torrent(magnet_link string) (*Torrent) {
+func new_torrent(magnet_link string, max_peers int) (*Torrent) {
 	var torrent Torrent
 	torrent.magnet_link = magnet_link
+	torrent.max_peers = max_peers
 	torrent.parse_magnet_link()
 	return &torrent
 }
@@ -125,6 +132,11 @@ func (torrent *Torrent) find_peers() {
 		} (&wg, torrent.trackers[i])
 	}
 	wg.Wait()
+
+	// trim excess peers
+	if len(torrent.peers) > torrent.max_peers {
+		torrent.peers = torrent.peers[0:torrent.max_peers]
+	}
 }
 
 func metadata_constructor(ch chan Metadata_Piece, metadata_raw *map[int][]byte, pieces *[]int) {
@@ -188,5 +200,36 @@ func (torrent *Torrent) get_metadata() {
 	err := os.WriteFile("metadata.torrent", torrent.metadata_raw, 0644)
 	if err != nil {
 		panic(err)
+	}
+}
+
+// assumes the filename is "metadata.torrent", which of course will not be valid in the future if there are multiple torrents
+func (torrent *Torrent) parse_metadata_file() {
+	data, err := ioutil.ReadFile("metadata.torrent")
+	if err != nil {
+		panic(err)
+	}
+	
+	var result = Metadata{"", "", 0, "", 0, 0}
+	reader := bytes.NewReader(data)
+	err = bencode.Unmarshal(reader, &result)
+	if err != nil {
+		panic(err)
+	}
+	torrent.metadata = result
+	torrent.display_name = torrent.metadata.Name
+	fmt.Println(result)
+//	return &result
+
+}
+func (torrent *Torrent) start_download() {
+	// ensure we have the metadata
+	torrent.parse_metadata_file()
+
+	// get num_want peers
+	torrent.find_peers()
+
+	for i := 0; i < len(torrent.peers); i++ {
+		
 	}
 }

@@ -23,12 +23,13 @@ const(
 	CANCEL message_id = 8
 	PORT message_id = 9
 	EXTENDED message_id = 20
+	STOP message_id = 99 // for internal use only
 )
 
 // <length prefix><message ID><payload>
 // choke - not_interrested do not have a payload
 type Message struct {
-	length_prefix int32
+	length_prefix uint32
 	id message_id
 }
 
@@ -53,6 +54,12 @@ type Metadata_Response struct {
 	Total_size int
 }
 
+func (message *Message) marshall() ([]byte) {
+	b := make([]byte, 5) // len_prefix (4) + id (1)
+	binary.BigEndian.PutUint32(b[0:], message.length_prefix)
+	b = append(b, uint8(message.id))
+	return b
+}
 
 func encode_metadata_request(piece_number int) (string) {
 	var b bytes.Buffer

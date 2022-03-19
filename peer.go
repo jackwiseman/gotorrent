@@ -22,6 +22,10 @@ type Peer struct {
 	uses_extended bool // false by default
 	is_alive bool // assume yes until a handshake fails
 	extensions map[string]int
+
+	// wrapped io.Reader/io.Writer interfaces
+	peer_writer Peer_Writer
+//	peer_reader Peer_Reader
 }
 
 func (peer *Peer) set_extensions(extensions map[string]int) {
@@ -29,7 +33,13 @@ func (peer *Peer) set_extensions(extensions map[string]int) {
 }
 
 func new_peer(ip string, port string) (*Peer) {
-	return &Peer{ip, port, nil, false, false, nil}
+	var peer Peer
+
+	peer.ip = ip
+	peer.port = port
+
+	return &peer
+	//return &Peer{ip, port, nil, false, false, nil}
 }
 
 // loop which 
