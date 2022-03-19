@@ -9,6 +9,7 @@ import (
 	//	"bytes"
 	"math/rand"
 	"time"
+	"sync"
 )
 
 type Torrent struct {
@@ -18,6 +19,7 @@ type Torrent struct {
 	trackers []Tracker
 	metadata_size int // in bytes
 	metadata_pieces int
+	metadata_raw []byte
 	peers []Peer
 }
 
@@ -98,26 +100,33 @@ func (torrent Torrent) print_info() {
 func (torrent *Torrent) find_peers() {
 	// coppertracker is being a pain, so i'm just going to skip it for now
 	// TODO: replace i=1 with i=0 before deploying
-	for i := 1; i < len(torrent.trackers); i++ {
-		fmt.Println("Connecting to " + torrent.trackers[i].link)
+	var wg sync.WaitGroup
 
-		err := torrent.trackers[i].connect()
-		if err != nil {
-			continue
-		}
+	for i := 0; i < len(torrent.trackers); i++ {
+		wg.Add(1)
+		go func(wg *sync.WaitGroup, tracker Tracker) {
+			defer wg.Done()
+			fmt.Println("Connecting to " + tracker.link)
 
-		torrent.trackers[i].set_connection_id()
-		if err != nil {
-			continue
-		}
+			err := tracker.connect()
+			if err != nil {
+				return
+			}
 
-		torrent.trackers[i].announce(torrent)
-		if err != nil {
-			continue
-		}
+			tracker.set_connection_id()
+			if err != nil {
+				return
+			}
 
-		torrent.trackers[i].disconnect()
+			tracker.announce(torrent)
+			if err != nil {
+				return
+			}
+
+			tracker.disconnect()
+		} (&wg, torrent.trackers[i])
 	}
+	wg.Wait()
 }
 
 func metadata_constructor(ch chan Metadata_Piece, metadata_raw *map[int][]byte, pieces *[]int) {
@@ -137,111 +146,49 @@ func (torrent *Torrent) get_metadata() {
 
 	var metadata_peers []Peer
 	pieces := make([]int, torrent.metadata_pieces) // array of [0, 0, 0, 0, 0, 0, ...] denoting the pieces we have
-	metadata_raw := make(map[int][]byte)
-	piece_ch := make(chan Metadata_Piece)
 
+	var handshake_wg sync.WaitGroup
 	// populate array with peers who can send metadata
-	for i := 0; i < len(torrent.peers); i++ {
-		fmt.Println("Connecting to peer " + strconv.Itoa(i) + "/" + strconv.Itoa(len(torrent.peers)))
-		torrent.peers[i].connect()
-		torrent.peers[i].perform_handshake(torrent)
-		if torrent.peers[i].uses_extended {
-			_, supports_metadata := torrent.peers[i].extensions["ut_metadata"]
-			if supports_metadata {
-				//fmt.Println("Requesting piece " + strconv.Itoa(pieces))
-				//successful, data := torrent.peers[i].request_metadata(pieces)
-				//if successful {
-				//	pieces = pieces + 1
-				//	metadata_raw = append(metadata_raw[:], data[:]...)
-				//}
-				//				metadata_peers = append(metadata_peers, torrent.peers[i])
-				//				if len(metadata_peers) == torrent.metadata_pieces {
-				//if pieces == torrent.metadata_pieces {
-				//	torrent.peers[i].disconnect()
-				//	break
-				//}
-				metadata_peers = append(metadata_peers, torrent.peers[i])
-				//continue // don't disconnect from them if they have the info we need, obviously we're going to need to keep ALL of these connections alive eventually, but this is the initial step
-				break
+	for i := 0; i < len(torrent.peers)-1;  i++ {
+		handshake_wg.Add(1)
+		go func(wg *sync.WaitGroup, metadata_peers *[]Peer, peer Peer) {
+			fmt.Println("Connecting to " + peer.ip)
+			defer wg.Done()
+			peer.connect()
+			peer.perform_handshake(torrent)
+			if peer.uses_extended {
+				_, supports_metadata := peer.extensions["ut_metadata"]
+				if supports_metadata {
+					*metadata_peers = append(*metadata_peers, peer)
+					return // don't disconnect from them if they have the info we need, obviously we're going to need to keep ALL of these connections alive eventually, but this is the initial step
+				}
 			}
-		}
-		torrent.peers[i].disconnect()
+			torrent.peers[i].disconnect()
+		} (&handshake_wg, &metadata_peers, torrent.peers[i])
 	}
 
-	fmt.Println("Found " + strconv.Itoa(len(metadata_peers)) + " willing to send metadata")
+	handshake_wg.Wait()
+
+	fmt.Println("Found " + strconv.Itoa(len(metadata_peers)) + " peers willing to send metadata")
+	fmt.Println(metadata_peers)
 
 	for i := 0; i < torrent.metadata_pieces; i++ {
 		pieces = append(pieces, 0)
 	}
 
-
-
-	go metadata_constructor(piece_ch, &metadata_raw, &pieces)
-
 	rand.Seed(time.Now().UnixNano())
-	/*for need_piece(pieces) { // while there are outstanding pieces, keep asking peers for metadata
-		if reflect.DeepEqual(pieces, last) == false {
-			fmt.Println(pieces)
-			last = pieces
-		}
-		go metadata_peers[rand.Intn(len(metadata_peers) - 1)].request_metadata(get_rand_piece(pieces), piece_ch)
-		time.Sleep(time.Second)
-	}*/
 
 	// start a goroutine for each metadata peer (might not work if peers > pieces)
+	var metadata_collect sync.WaitGroup
 	for i := 0; i < len(metadata_peers); i++ {
-		go metadata_peers[i].request_metadata(piece_ch, &pieces)
+		metadata_collect.Add(1)
+		go metadata_peers[i].request_metadata(&(torrent.metadata_raw), &pieces, &metadata_collect, torrent.metadata_size)
 	}
+	
+	metadata_collect.Wait()
 
-	// build the map of metadata
-	for len(metadata_raw) < len(pieces) {
-		piece := <-piece_ch
-		metadata_raw[piece.piece_num] = piece.data
-		pieces[piece.piece_num] = 1
-		fmt.Println(pieces)
-	}
-
-	fmt.Println("-----")
-	fmt.Println(pieces)
-	fmt.Println(len(metadata_raw))
-
-	metadata_slice := make([]byte, 0)
-
-	for i := 0; i < torrent.metadata_pieces; i++ {
-		fmt.Println(i)
-		fmt.Println(len(metadata_raw[i]))
-		metadata_slice = append(metadata_slice, metadata_raw[i]...)
-		fmt.Println(len(metadata_slice))
-	}
-	fmt.Println("Slice len: " + strconv.Itoa(len(metadata_slice)))
-	fmt.Println(string(metadata_slice))
-
-	err := os.WriteFile("metadata.torrent", metadata_slice, 0644)
+	err := os.WriteFile("metadata.torrent", torrent.metadata_raw, 0644)
 	if err != nil {
 		panic(err)
 	}
-
-	// Write all the data we've gotten to a file
-	/*file, err := os.OpenFile(
-		"metadata.torrent",
-		os.O_WRONLY|os.O_TRUNC|os.O_CREATE,
-		0666,
-	)
-	if err != nil {
-		panic(err)
-	}
-	defer file.Close()
-
-	// Write bytes to file
-	bytesWritten, err := file.Write(metadata_slice)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("Wrote " + strconv.Itoa(bytesWritten) + " bytes.")*/
-
-	// now that we have our metadata_peers, ask each of them for a different piece (later needs to be done synchronously)
-	//	for i := 0; i < torrent.metadata_pieces; i++ {
-	//		fmt.Println("Requesting piece " + strconv.Itoa(i))
-	//		metadata_peers[i].request_metadata(i)
-	//	}
 }

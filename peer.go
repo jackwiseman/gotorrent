@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"strconv"
-	"strings"
+	"sync"
+//	"strings"
 	"net"
 	"time"
 	"errors"
@@ -29,6 +31,61 @@ func (peer *Peer) set_extensions(extensions map[string]int) {
 func new_peer(ip string, port string) (*Peer) {
 	return &Peer{ip, port, nil, false, false, nil}
 }
+
+// loop which 
+/*func run() {
+	defer peer.disconnect()
+	for {
+		var length uint32
+		peer.conn.Read(&length)
+
+		if length == 0 { // keepalive
+			continue
+		}
+		
+		var messageid uint8
+		peer.conn.Read(&messageid)
+
+		switch messageid {
+			// choke
+			case 0:
+				fmt.Println("Received choke")
+			// unchoke
+			case 1:
+				fmt.Println("Received unchoke")
+			// interrested
+			case 2:
+				fmt.Println("Received interrested")
+			// not interrested
+			case 3:
+				fmt.Println("Received not interrested")
+			// have
+			case 4:
+				fmt.Println("Received have")
+			// bitfield
+			case 5:
+				fmt.Println("Received bitfield")
+			// request
+			case 6:
+				fmt.Println("Received request")
+			// piece
+			case 7:
+				fmt.Println("Received piece")
+			// cancel
+			case 8:
+				fmt.Println("Received cancel")
+			// port
+			case 9:
+				fmt.Println("Received port")
+			// extended
+			case 20:
+				fmt.Println("Received extended")
+			default:
+				fmt.Println("Received bad message_id")
+		}
+
+	}
+}*/
 
 // Connect to peer via TCP, returning false otherwise
 // TODO: return error instead?
@@ -110,6 +167,7 @@ func (peer *Peer) perform_handshake (torrent *Torrent) (error) {
 		if result.Metadata_size != 0 {
 			torrent.metadata_size = result.Metadata_size
 			torrent.metadata_pieces = int(math.Round(float64(torrent.metadata_size)/float64(16384) + 1.0))
+			torrent.metadata_raw = make([]byte, result.Metadata_size)
 			//	fmt.Println("Metadata size:")
 			//	fmt.Println(torrent.metadata_size)
 			//	fmt.Println("Pieces: ")
@@ -121,7 +179,11 @@ func (peer *Peer) perform_handshake (torrent *Torrent) (error) {
 	return nil
 }
 
-func (peer *Peer) request_metadata(ch chan Metadata_Piece, pieces *[]int) /*(bool, []byte)*/ {
+func (peer *Peer) request_metadata(metadata_raw *[]byte, pieces *[]int, wg *sync.WaitGroup, metadata_size int) /*(bool, []byte)*/ {
+	defer wg.Done()
+
+	var attempts int // we only want to try reading a few times, so increment this 10 times and then exit
+
 	for need_piece(*pieces) {
 		curr_piece := get_rand_piece(*pieces)
 
@@ -140,68 +202,101 @@ func (peer *Peer) request_metadata(ch chan Metadata_Piece, pieces *[]int) /*(boo
 		if err != nil || bytes_written < len(packet) {
 			peer.is_alive = false
 			fmt.Println(errors.New("Error: unable to write to peer, here is the error dump:"))
+			// try reconnecting + handshaking ?
 			fmt.Println(peer)
+			return
+		}
+
+
+		// Read metadata piece
+		var length_prefix uint32
+		var message_id uint8
+		var extension_id uint8
+		
+		// Set a read deadline of a few seconds
+		timeout := 5 * time.Second
+		peer.conn.SetReadDeadline(time.Now().Add(timeout))
+
+		peer_reader := bufio.NewReaderSize(peer.conn, 6) // len + id + extension id
+
+		err = binary.Read(peer_reader, binary.BigEndian, &length_prefix)
+		if err != nil {
+			fmt.Println("Error reading length_prefix")
+			fmt.Println(err)
+			return
+		}
+
+		err = binary.Read(peer_reader, binary.BigEndian, &message_id)
+		if err != nil {
+			fmt.Println("Error reading message_id")
+			fmt.Println(err)
+			return
+		}
+
+		
+		err = binary.Read(peer_reader, binary.BigEndian, &extension_id)
+		if err != nil {
+			fmt.Println("Error reading extension_id")
+			fmt.Println(err)
+			return
+		}
+
+		/*fmt.Println("----")
+		fmt.Println(peer.ip)
+		fmt.Println(length_prefix)
+		fmt.Println(message_id)
+		fmt.Println(extension_id)
+		fmt.Println("----")
+		return*/
+
+		
+		if int(message_id) != 20 || int(extension_id) != 0 {
+			if attempts > 10 {
+				fmt.Println("Too many attempts :(")
+				return
+			}
+			attempts++
 			continue
 		}
 
-		buf := make([]byte, 0, 19968) // big buffer
-		tmp := make([]byte, 256)     // using small tmo buffer for demonstrating
-
-		read_start := time.Now().Add(time.Second * 15)
-		var expected int
-
-		//	peer.conn.SetReadDeadline(time.Second * time.Duration(5))
-
-		for i := 0; i < 78; i++ {
-			n, err := peer.conn.Read(tmp)
-			if err != nil {
-				if err != io.EOF {
-					fmt.Println("read error:", err)
-				}
-				//return false, nil
-				break
-			}
-
-			buf = append(buf, tmp[:n]...)
-//			fmt.Println("got", n, "bytes from " + peer.ip)
-
-			if i == 0 && len(tmp) == 256 {
-				response_bencode_string := string(buf[0:100]) // only issue is if the 'ee' isnt found here
-				start_index := strings.Index(response_bencode_string, "d")
-				if start_index == -1 {
-					continue
-				}
-				fmt.Println(response_bencode_string)
-				expected = int(binary.BigEndian.Uint32(buf[start_index - 6:]))
-			}
-			if i > 0 && len(buf) > 256 {
-//				fmt.Println(len(buf))
-//				fmt.Println(expected)
-				if len(buf) >= expected {
-					break
-				}
-			}
-			if time.Now().After(read_start) {
-				break
-			}
+		// unless this is the last peer, the bencoded info must be length_prefix - (1024 * 16) - 2 bytes
+		var bencode_length int
+		if curr_piece < len(*pieces) - 1 {
+			bencode_length = int(length_prefix) - (1024 * 16) - 2
+		} else {
+			bencode_length = int(length_prefix) - (metadata_size % (1024 * 16)) - 2
 		}
-		//fmt.Printf("? " + strconv.Itoa(len(buf)))
-		if len(buf) > 99 {
-			response_len := binary.BigEndian.Uint32(buf[0:])
-			//	response_id := buf[4]
-			//	response_extension := buf[5]
-			response_bencode_string := string(buf[0:100]) // only issue is if the 'ee' isnt found here
-			start_index := strings.Index(response_bencode_string, "d")
-			index := strings.Index(response_bencode_string, "ee")
-			if index == -1 || start_index == -1 {
-				continue
-			}
-			response_len = binary.BigEndian.Uint32(buf[start_index - 6:])
-			//bencode := response_bencode_string[start_index:index+2] // there's also a chance they don't have it
-			//fmt.Println("Bencode info: " + bencode)
-			fmt.Println("This piece is " + strconv.Itoa(len(buf[index+2:response_len+4])) + " bytes")
-			ch <- Metadata_Piece{curr_piece, buf[index+2:response_len+4]} // add 4 to the response len because it does not include the initial uint32
-			continue
+
+		bencode_buf := make([]byte, bencode_length)
+		_, err = io.ReadFull(peer_reader, bencode_buf)
+		if err != nil {
+			fmt.Println("Error reading bencode")
+			fmt.Println(err)
+			return
 		}
+
+
+		fmt.Println("----")
+		fmt.Println(length_prefix)
+		fmt.Println(message_id)
+		fmt.Println(extension_id)
+		fmt.Println(string(bencode_buf))
+		fmt.Println("----")
+
+		fmt.Println("Received piece " + strconv.Itoa(curr_piece) + " from " + peer.ip)
+
+		metadata_piece := make([]byte, int(length_prefix) - bencode_length - 2)
+		_, err = io.ReadFull(peer_reader, metadata_piece)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		temp := (*metadata_raw)[curr_piece * (1024 * 16) + len(metadata_piece):]
+		*metadata_raw = append((*metadata_raw)[0:curr_piece * 16384], metadata_piece...)
+		*metadata_raw = append(*metadata_raw, temp...)
+		(*pieces)[curr_piece] = 1
+		attempts = 0
+		return
 	}
 }
