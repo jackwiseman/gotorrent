@@ -98,8 +98,6 @@ func (torrent Torrent) print_info() {
 }
 
 func (torrent *Torrent) find_peers() {
-	// coppertracker is being a pain, so i'm just going to skip it for now
-	// TODO: replace i=1 with i=0 before deploying
 	var wg sync.WaitGroup
 
 	for i := 0; i < len(torrent.trackers); i++ {
@@ -184,7 +182,7 @@ func (torrent *Torrent) get_metadata() {
 		metadata_collect.Add(1)
 		go metadata_peers[i].request_metadata(&(torrent.metadata_raw), &pieces, &metadata_collect, torrent.metadata_size)
 	}
-	
+
 	metadata_collect.Wait()
 
 	err := os.WriteFile("metadata.torrent", torrent.metadata_raw, 0644)
