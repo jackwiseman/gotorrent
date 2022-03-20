@@ -24,8 +24,8 @@ type Peer struct {
 	extensions map[string]int
 
 	// wrapped io.Reader/io.Writer interfaces
-	peer_writer Peer_Writer
-//	peer_reader Peer_Reader
+//	pw Peer_Writer
+	pr *Peer_Reader
 }
 
 func (peer *Peer) set_extensions(extensions map[string]int) {
@@ -42,63 +42,28 @@ func new_peer(ip string, port string) (*Peer) {
 	//return &Peer{ip, port, nil, false, false, nil}
 }
 
-// loop which 
-/*func run() {
+func (peer *Peer) run(torrent *Torrent) {
 	defer peer.disconnect()
-	for {
-		var length uint32
-		peer.conn.Read(&length)
 
-		if length == 0 { // keepalive
-			continue
-		}
-		
-		var messageid uint8
-		peer.conn.Read(&messageid)
-
-		switch messageid {
-			// choke
-			case 0:
-				fmt.Println("Received choke")
-			// unchoke
-			case 1:
-				fmt.Println("Received unchoke")
-			// interrested
-			case 2:
-				fmt.Println("Received interrested")
-			// not interrested
-			case 3:
-				fmt.Println("Received not interrested")
-			// have
-			case 4:
-				fmt.Println("Received have")
-			// bitfield
-			case 5:
-				fmt.Println("Received bitfield")
-			// request
-			case 6:
-				fmt.Println("Received request")
-			// piece
-			case 7:
-				fmt.Println("Received piece")
-			// cancel
-			case 8:
-				fmt.Println("Received cancel")
-			// port
-			case 9:
-				fmt.Println("Received port")
-			// extended
-			case 20:
-				fmt.Println("Received extended")
-			default:
-				fmt.Println("Received bad message_id")
-		}
-
+	fmt.Println("Connecting...")
+	err := peer.connect()
+	if err != nil {
+		fmt.Println("Bad peer")
+		return
 	}
-}*/
+	fmt.Println("Handshaking...")
+	peer.perform_handshake(torrent)
+	if err != nil {
+		fmt.Println("Bad handshake")
+		fmt.Println(err)
+		return
+	}
+//	fmt.Println(peer.conn)
+	fmt.Println("Running Peer_Reader...")
+	peer.pr.run()
+}
 
-// Connect to peer via TCP, returning false otherwise
-// TODO: return error instead?
+// Connect to peer via TCP and create a peer_reader over connection
 func (peer *Peer) connect() (error) {
 	timeout := time.Second * 3
 	conn, err := net.DialTimeout("tcp", peer.ip + ":" + peer.port, timeout)
@@ -107,6 +72,7 @@ func (peer *Peer) connect() (error) {
 		return err
 	} else {
 		peer.conn = conn
+		peer.pr = new_peer_reader(peer)
 		return nil
 	}
 }
@@ -123,58 +89,83 @@ func (peer *Peer) perform_handshake (torrent *Torrent) (error) {
 	}
 
 	// Create handshake message
-	pstrlen := 19
-	pstr := "BitTorrent protocol"
+	// pstrlen := 19
+	// pstr := "BitTorrent protocol"
 
-	handshake := make([]byte, 49 + pstrlen)
-	copy(handshake[0:], []byte([]uint8{uint8(pstrlen)}))
-	copy(handshake[1:], []byte(pstr))
-	handshake[25] = 16 // we need to demonstrate that this client supports extended messages, so we set the 20th bit (big endian) to 1
-	copy(handshake[28:], torrent.info_hash)
-	peer_id := "GoLangTorrent_v0.0.1" // TODO: generate a random peer_id?
-	copy(handshake[48:], []byte(peer_id))
+	// handshake := make([]byte, 49 + pstrlen)
+	// copy(handshake[0:], []byte([]uint8{uint8(pstrlen)}))
+	// copy(handshake[1:], []byte(pstr))
+	// handshake[25] = 16 // we need to demonstrate that this client supports extended messages, so we set the 20th bit (big endian) to 1
+	// copy(handshake[28:], torrent.info_hash)
+	// peer_id := "GoLangTorrent_v0.0.1" // TODO: generate a random peer_id?
+	// copy(handshake[48:], []byte(peer_id))
 
-	// Write to peer
-	bytes_written, err := peer.conn.Write(handshake)
-	if err != nil || bytes_written < 49 + pstrlen {
+	// // Write to peer
+	// bytes_written, err := peer.conn.Write(handshake)
+	// if err != nil || bytes_written < 49 + pstrlen {
+	// 	peer.is_alive = false
+	// 	return errors.New("Error: unable to write to peer")
+	// }
+
+	outgoing_handshake := get_handshake_message(torrent)
+	_, err := peer.conn.Write(outgoing_handshake)
+	if err != nil {
 		peer.is_alive = false
 		return errors.New("Error: unable to write to peer")
 	}
 
 	// Read from peer
-	buf := make([]byte, 49 + pstrlen) // should probably be longer, but for now I'll assume all will use the default pstrlen = 19 for 'BitTorrent protocol'
-	_, err = peer.conn.Read(buf)
-
+	pstrlen_buf := make([]byte, 1)
+	_, err = peer.conn.Read(pstrlen_buf)
 	if err != nil {
 		peer.is_alive = false
-		return errors.New("Error: unable to read from peer")
+		return errors.New("Error: could not read from peer")
 	}
 
+	pstrlen := int(pstrlen_buf[0])
+	fmt.Println(pstrlen)
+
+
+	buf := make([]byte, 48 + pstrlen)
+	_, err = peer.conn.Read(buf)
+	if err != nil {
+		peer.is_alive = false
+		return errors.New("Error: could not read from peer")
+	}
+
+	fmt.Println(string(buf[0:pstrlen]))
+
+	
 	// if the peer utilizes extended messages (most likely), we next need to send an extended handshake, mostly just for getting metadata
-	if buf[25] & 0x10 == 16 {
+	if buf[24] & 0x10 == 16 {
 		peer.uses_extended = true
 		//fmt.Println("Peer supports extended messaging, performing extended message handshake")
-		packet := get_handshake_message()
+		outgoing_extended_handshake := get_extended_handshake_message()
 
-		bytes_written, err := peer.conn.Write(packet)
-		if err != nil || bytes_written < len(packet) {
+		bytes_written, err := peer.conn.Write(outgoing_extended_handshake)
+		if err != nil || bytes_written < len(outgoing_extended_handshake) {
 			peer.is_alive = false
 			return errors.New("Error: unable to write to peer in extended handshake")
 		}
 
-		buf = make([]byte, 2048) // we don't know how many different extensions the peer's client will have
+		length_prefix_buf := make([]byte, 4)
+		_, err = peer.conn.Read(length_prefix_buf)
+		if err != nil {
+			return err
+		}
+		
+		length_prefix := binary.BigEndian.Uint32(length_prefix_buf[0:])
+
+		buf = make([]byte, int(length_prefix))
 		_, err = peer.conn.Read(buf)
-		if err != io.EOF && err != nil {
-			return(err)
+		if err != nil {
+			return err
 		}
 
-		message_length := binary.BigEndian.Uint32(buf[0:])
-		//bittorrent_message_id := buf[4]
-		//extended_message_id := buf[5]
-		result := decode_handshake(buf[6:6+message_length])
+		result := decode_handshake(buf[2:])
 		peer.set_extensions(result.M)
 
-		if result.Metadata_size != 0 {
+		if result.Metadata_size != 0 && torrent.metadata_size == 0 { // make sure they attached metadata size, also no reason to overwrite if we already set
 			torrent.metadata_size = result.Metadata_size
 			torrent.metadata_pieces = int(math.Round(float64(torrent.metadata_size)/float64(16384) + 1.0))
 			torrent.metadata_raw = make([]byte, result.Metadata_size)
@@ -183,9 +174,7 @@ func (peer *Peer) perform_handshake (torrent *Torrent) (error) {
 			//	fmt.Println("Pieces: ")
 			//	fmt.Println(int(math.Round(float64(torrent.metadata_size)/float64(16384) + 1.0))) // this is not correct
 		}
-	} else {
-		//fmt.Println("Peer does not support extended messaging")
-	}
+	} 
 	return nil
 }
 
@@ -232,7 +221,6 @@ func (peer *Peer) request_metadata(metadata_raw *[]byte, pieces *[]int, wg *sync
 		err = binary.Read(peer_reader, binary.BigEndian, &length_prefix)
 		if err != nil {
 			fmt.Println("Error reading length_prefix")
-			fmt.Println(err)
 			return
 		}
 

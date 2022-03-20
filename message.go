@@ -89,7 +89,22 @@ func decode_handshake(payload []byte) (*ExtendedMessagePayload) { // not sure wh
 	return &result
 }
 
-func get_handshake_message() ([]byte) {
+func get_handshake_message(torrent *Torrent) ([]byte) {
+	pstrlen := 19
+	pstr := "BitTorrent protocol"
+
+	packet := make([]byte, 49 + pstrlen)
+	copy(packet[0:], []uint8{uint8(pstrlen)})
+	copy(packet[1:], []byte(pstr))
+	packet[25] = 16
+	copy(packet[28:], torrent.info_hash)
+	peer_id := "GoLangTorrent_v0.0.1" // TODO: generate a random peer_id?
+	copy(packet[48:], []byte(peer_id))
+
+	return packet
+}
+
+func get_extended_handshake_message() ([]byte) {
 	// <message_len><message_id == 20><handshake_identifier == 0><payload>
 	payload_raw := "d11:ut_metadatai1ee" // bencoded dict setting metadata to 1, as this is the only thing we should support
 	payload := []byte(payload_raw)

@@ -107,7 +107,8 @@ func (torrent Torrent) print_info() {
 func (torrent *Torrent) find_peers() {
 	var wg sync.WaitGroup
 
-	for i := 0; i < len(torrent.trackers); i++ {
+	// TODO: fix bad trackers?
+	for i := 1; i < len(torrent.trackers); i++ {
 		wg.Add(1)
 		go func(wg *sync.WaitGroup, tracker Tracker) {
 			defer wg.Done()
@@ -230,6 +231,6 @@ func (torrent *Torrent) start_download() {
 	torrent.find_peers()
 
 	for i := 0; i < len(torrent.peers); i++ {
-		
+		torrent.peers[i].run(torrent)
 	}
 }
