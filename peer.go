@@ -22,9 +22,12 @@ type Peer struct {
 	uses_extended bool // false by default
 	is_alive bool // assume yes until a handshake fails
 	extensions map[string]int
+	bitfield []byte
+
+	torrent *Torrent // associated torrent
 
 	// wrapped io.Reader/io.Writer interfaces
-//	pw Peer_Writer
+	pw *Peer_Writer
 	pr *Peer_Reader
 }
 
@@ -32,18 +35,19 @@ func (peer *Peer) set_extensions(extensions map[string]int) {
 	peer.extensions = extensions
 }
 
-func new_peer(ip string, port string) (*Peer) {
+func new_peer(ip string, port string, torrent *Torrent) (*Peer) {
 	var peer Peer
 
 	peer.ip = ip
 	peer.port = port
+	peer.torrent = torrent
 
 	return &peer
 	//return &Peer{ip, port, nil, false, false, nil}
 }
 
 func (peer *Peer) run(torrent *Torrent) {
-	defer peer.disconnect()
+//	defer peer.disconnect()
 
 	fmt.Println("Connecting...")
 	err := peer.connect()
@@ -53,14 +57,44 @@ func (peer *Peer) run(torrent *Torrent) {
 	}
 	fmt.Println("Handshaking...")
 	peer.perform_handshake(torrent)
+
 	if err != nil {
 		fmt.Println("Bad handshake")
 		fmt.Println(err)
 		return
 	}
+
+	fmt.Println("Getting bitfield...")
+	peer.get_bitfield()
+	if err != nil {
+		fmt.Println("Bad bitfield")
+		fmt.Println(err)
+		return
+	}
 //	fmt.Println(peer.conn)
-	fmt.Println("Running Peer_Reader...")
-	peer.pr.run()
+
+
+	var wg sync.WaitGroup
+
+	fmt.Println(peer.extensions)
+	fmt.Println("Running Peer_Reader/Peer_Writer")
+	wg.Add(2)
+	go peer.pr.run(&wg)
+	go peer.pw.run(&wg)
+
+	wg.Add(1)
+	//fmt.Println("Requesting metadata...")
+	go peer.pw.send_metadata_request(0, &wg) // arbitrary piece for now
+	//fmt.Println("We're interrested boi")
+	//peer.pw.write(Message{1, INTERESTED})
+
+	// TODO: Figure out why I'm not getting a response back...
+	// Definitely able to read messages, I can see a keep_alive every few minutes, but not getting anything else
+	// Try to get unchoked?
+	// Things to try, other messages--is it just the extended message that i'm not getting?
+
+	fmt.Println("Waiting...")
+	wg.Wait()
 }
 
 // Connect to peer via TCP and create a peer_reader over connection
@@ -73,6 +107,7 @@ func (peer *Peer) connect() (error) {
 	} else {
 		peer.conn = conn
 		peer.pr = new_peer_reader(peer)
+		peer.pw = new_peer_writer(peer)
 		return nil
 	}
 }
@@ -87,25 +122,6 @@ func (peer *Peer) perform_handshake (torrent *Torrent) (error) {
 	if peer.conn == nil {
 		return errors.New("Error: peer's connection is nil")
 	}
-
-	// Create handshake message
-	// pstrlen := 19
-	// pstr := "BitTorrent protocol"
-
-	// handshake := make([]byte, 49 + pstrlen)
-	// copy(handshake[0:], []byte([]uint8{uint8(pstrlen)}))
-	// copy(handshake[1:], []byte(pstr))
-	// handshake[25] = 16 // we need to demonstrate that this client supports extended messages, so we set the 20th bit (big endian) to 1
-	// copy(handshake[28:], torrent.info_hash)
-	// peer_id := "GoLangTorrent_v0.0.1" // TODO: generate a random peer_id?
-	// copy(handshake[48:], []byte(peer_id))
-
-	// // Write to peer
-	// bytes_written, err := peer.conn.Write(handshake)
-	// if err != nil || bytes_written < 49 + pstrlen {
-	// 	peer.is_alive = false
-	// 	return errors.New("Error: unable to write to peer")
-	// }
 
 	outgoing_handshake := get_handshake_message(torrent)
 	_, err := peer.conn.Write(outgoing_handshake)
@@ -123,8 +139,6 @@ func (peer *Peer) perform_handshake (torrent *Torrent) (error) {
 	}
 
 	pstrlen := int(pstrlen_buf[0])
-	fmt.Println(pstrlen)
-
 
 	buf := make([]byte, 48 + pstrlen)
 	_, err = peer.conn.Read(buf)
@@ -133,9 +147,8 @@ func (peer *Peer) perform_handshake (torrent *Torrent) (error) {
 		return errors.New("Error: could not read from peer")
 	}
 
-	fmt.Println(string(buf[0:pstrlen]))
+	// need to confirm that peerid is the same as supplied on tracker
 
-	
 	// if the peer utilizes extended messages (most likely), we next need to send an extended handshake, mostly just for getting metadata
 	if buf[24] & 0x10 == 16 {
 		peer.uses_extended = true
@@ -178,6 +191,39 @@ func (peer *Peer) perform_handshake (torrent *Torrent) (error) {
 	return nil
 }
 
+// nominally we'd like to just disconnect from this peer for now, since seeding will probably be implemented later
+func (peer *Peer) get_bitfield () (error) {
+	length_prefix_buf := make([]byte, 4)
+	message_id_buf := make([]byte, 1)
+
+	_, err := peer.conn.Read(length_prefix_buf)
+	if err != nil {
+		return err
+	}
+
+	_, err = peer.conn.Read(message_id_buf)
+	if err != nil {
+		return err
+	}
+
+	length_prefix := int(binary.BigEndian.Uint32(length_prefix_buf[0:]))
+	message_id := int(message_id_buf[0])
+
+	if message_id != BITFIELD {
+		return errors.New("Got unexpected message from peer, expecting BITFIELD")
+	}
+
+	bitfield_buf := make([]byte, length_prefix - 1)
+	_, err = peer.conn.Read(bitfield_buf)
+	if err != nil {
+		return err
+	}
+
+	peer.bitfield = bitfield_buf
+	return nil
+}
+
+// this is outdated now, the reason it wasn't always working was because the peer was usually sending the BITFIELD immediately
 func (peer *Peer) request_metadata(metadata_raw *[]byte, pieces *[]int, wg *sync.WaitGroup, metadata_size int) /*(bool, []byte)*/ {
 	defer wg.Done()
 
@@ -196,6 +242,9 @@ func (peer *Peer) request_metadata(metadata_raw *[]byte, pieces *[]int, wg *sync
 		metadata_id := uint8(peer.extensions["ut_metadata"])
 		copy(packet[5:], []byte([]uint8{metadata_id}))
 		copy(packet[6:], payload)
+
+		fmt.Println(packet)
+		return
 
 		bytes_written, err := peer.conn.Write(packet)
 		if err != nil || bytes_written < len(packet) {
@@ -217,6 +266,43 @@ func (peer *Peer) request_metadata(metadata_raw *[]byte, pieces *[]int, wg *sync
 		peer.conn.SetReadDeadline(time.Now().Add(timeout))
 
 		peer_reader := bufio.NewReaderSize(peer.conn, 6) // len + id + extension id
+
+		length_prefix_buf := make([]byte, 4)
+		message_id_buf := make([]byte, 1)
+		extension_id_buf := make([]byte, 1)
+
+		_, err = peer.conn.Read(length_prefix_buf)
+		if err != nil {
+			fmt.Println("Error reading length_prefix")
+			return
+			//return err
+		}
+
+		_, err = peer.conn.Read(message_id_buf)
+		if err != nil {
+			fmt.Println("Error reading length_prefix")
+			return
+			//return err
+		}
+
+		_, err = peer.conn.Read(extension_id_buf)
+		if err != nil {
+			fmt.Println("Error reading length_prefix")
+			return
+			//return err
+		}
+
+		length_prefix = binary.BigEndian.Uint32(length_prefix_buf[0:])
+		fmt.Println(length_prefix)
+
+		fmt.Println("----")
+		fmt.Println(peer.ip)
+		fmt.Println(length_prefix)
+		fmt.Println(message_id_buf[0])
+		fmt.Println(extension_id_buf[0])
+		fmt.Println("----")
+		return
+
 
 		err = binary.Read(peer_reader, binary.BigEndian, &length_prefix)
 		if err != nil {
