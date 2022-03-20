@@ -236,7 +236,7 @@ func (tracker *Tracker) announce(torrent *Torrent) (error) {
 					ip_address := make(net.IP, 4)
 					binary.BigEndian.PutUint32(ip_address, ip_address_raw)
 
-					torrent.peers = append(torrent.peers, *new_peer(ip_address.String(), strconv.Itoa(int(port))))
+					torrent.peers = append(torrent.peers, *new_peer(ip_address.String(), strconv.Itoa(int(port)), torrent))
 				}
 				return nil
 			}

@@ -2,14 +2,18 @@ package main
 
 import (
 	"net"
+	"sync"
 	"io"
 //	"time"
 //	"bufio"
 	"fmt"
 	"encoding/binary"
+	"bytes"
 )
 
+// this structure likely should be changed, kind of redundant
 type Peer_Reader struct {
+	peer *Peer
 	conn net.Conn
 //	reader bufio.Reader
 //	buf_size int
@@ -19,16 +23,15 @@ type Peer_Reader struct {
 func new_peer_reader(peer *Peer) (*Peer_Reader) {
 	var pr Peer_Reader
 	pr.conn = peer.conn
-//	pr.buf_size = 6 // len + id + (extension id if id == 20)
-//	pr.reader = bufio.NewReaderSize(pr.conn, pr.buf_size)
+	pr.peer = peer
 	return &pr
 }
 
 // will need to also include keepalive messages
-func (pr *Peer_Reader) run() {
-//	timeout := 2 * time.Minute
-//	pr.conn.SetReadTimeout(timeout)
+func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
+	defer wg.Done()
 	for {
+		fmt.Println("Waiting for message")
 		length_prefix_buf := make([]byte, 4)
 		_, err := pr.conn.Read(length_prefix_buf)
 		if err != nil {
@@ -44,11 +47,10 @@ func (pr *Peer_Reader) run() {
 		
 		if length_prefix == 0 { // keepalive
 			fmt.Println("Received keepalive")
-			continue
+			fmt.Println("Moving to next peer for now")
+			return
+//			continue
 		}
-
-
-//		msg := <- pr.message_ch
 
 		message_id_buf := make([]byte, 1)
 		_, err = pr.conn.Read(message_id_buf)
@@ -62,55 +64,65 @@ func (pr *Peer_Reader) run() {
 
 		message_id := int(message_id_buf[0])
 
-//		fmt.Printf("\nLength: %d, Message_id: %d\n", length_prefix, message_id)
+		fmt.Printf("\nLength: %d, Message_id: %d\n", length_prefix, message_id)
 		
 		switch int(message_id) {
-			// choke
-			case 0:
-				if length_prefix != 1 {
-					continue
-				}
+			case CHOKE:
 				fmt.Println("Received choke")
-			// unchoke
-			case 1:
-				if length_prefix != 1 {
-					continue
-				}
+			case UNCHOKE:
 				fmt.Println("Received unchoke")
-			// interrested
-			case 2:
-				if length_prefix != 1 {
-					continue
-				}
+			case INTERESTED:
 				fmt.Println("Received interrested")
-			// not interrested
-			case 3:
-				if length_prefix != 1 {
-					continue
-				}
+			case NOT_INTERESTED:
 				fmt.Println("Received not interrested")
-			// have
-			case 4:
+			case HAVE:
 				fmt.Println("Received have")
-			// bitfield
-			case 5:
+			case BITFIELD:
 				fmt.Println("Received bitfield")
-				// should only accept this FIRST
-			// request
-			case 6:
+				bitfield_buf := make([]byte, length_prefix - 1)
+				_, err = pr.conn.Read(bitfield_buf)
+				if err != nil {
+					panic(err)
+				}
+				pr.peer.bitfield = bitfield_buf
+			case REQUEST:
 				fmt.Println("Received request")
-			// piece
-			case 7:
+			case PIECE:
 				fmt.Println("Received piece")
-			// cancel
-			case 8:
+			case CANCEL:
 				fmt.Println("Received cancel")
-			// port
-			case 9:
+			case PORT:
 				fmt.Println("Received port")
-			// extended
-			case 20:
-				fmt.Println("Received extended")
+			case EXTENDED:
+				fmt.Println("Received extended!!")
+				extended_id_buf := make([]byte, 1)
+				_, err = pr.conn.Read(extended_id_buf)
+				if err != nil {
+					panic(err)
+				}
+
+				if extended_id_buf[0] != uint8(0) {
+					fmt.Println("Received unsupported extended message")
+				}
+
+				payload_buf := make([]byte, length_prefix - 2)
+				_, err = pr.conn.Read(payload_buf)
+				if err != nil {
+					panic(err)
+				}
+
+				bencode_end := bytes.Index(payload_buf, []byte("ee")) + 2
+				bencode := payload_buf[0:bencode_end]
+				metadata_piece := payload_buf[bencode_end:]
+				fmt.Println(string(bencode))
+				fmt.Println(string(metadata_piece))
+				
+				
+
+				
+			//	pr.peer.torrent.metadata
+
+				return
 			default:
 				fmt.Println("Received bad message_id")
 		}

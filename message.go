@@ -8,33 +8,39 @@ import(
 	"strconv"
 )
 
-type message_id uint8
-
 const(
 //	KEEP_ALIVE message_id := // zero bytes, len prefix = 0 
-	CHOKE message_id = 0
-	UNCHOKE message_id = 1
-	INTERESTED message_id = 2
-	NOT_INTERESTED message_id = 3
-	HAVE message_id = 4
-	BITFIELD message_id = 5
-	REQUEST message_id = 6
-	PIECE message_id = 7
-	CANCEL message_id = 8
-	PORT message_id = 9
-	EXTENDED message_id = 20
-	STOP message_id = 99 // for internal use only
+	CHOKE = 0
+	UNCHOKE = 1
+	INTERESTED = 2
+	NOT_INTERESTED = 3
+	HAVE = 4
+	BITFIELD = 5
+	REQUEST = 6
+	PIECE = 7
+	CANCEL = 8
+	PORT = 9
+	EXTENDED = 20
+	STOP = 99 // for internal use only
 )
 
 // <length prefix><message ID><payload>
 // choke - not_interrested do not have a payload
 type Message struct {
 	length_prefix uint32
-	id message_id
+	id int
+}
+
+
+type Extended_Message struct {
+	length_prefix uint32
+	id uint8
+	extended_id uint8
+	payload []byte
 }
 
 // all variables need to be uppercase for visibility in the bencode package
-type ExtendedMessagePayload struct {
+type Extended_Handshake_Payload struct {
 	M map[string]int
 	V string // client version
 	Metadata_size int
@@ -55,10 +61,29 @@ type Metadata_Response struct {
 }
 
 func (message *Message) marshall() ([]byte) {
-	b := make([]byte, 5) // len_prefix (4) + id (1)
-	binary.BigEndian.PutUint32(b[0:], message.length_prefix)
-	b = append(b, uint8(message.id))
-	return b
+	packet := make([]byte, 4) // len_prefix (4) + id (1)
+	binary.BigEndian.PutUint32(packet[0:], message.length_prefix)
+	packet = append(packet, uint8(message.id))
+	fmt.Println(packet)
+	return packet
+}
+
+func (message *Extended_Message) marshall() ([]byte) {
+	packet := make([]byte, 4) // length_prefix (4) + id (1) + extended_id (1) + remaining payload
+	length_prefix := uint32(len(message.payload) + 2)
+	binary.BigEndian.PutUint32(packet[0:], length_prefix)
+	packet = append(packet, uint8(message.id))
+	packet = append(packet, uint8(message.extended_id))
+	packet = append(packet, message.payload...)
+
+	fmt.Println("----")
+	fmt.Println("Here's what was marshalled:")
+	fmt.Println(binary.BigEndian.Uint32(packet[0:]))
+	fmt.Println(packet[4])
+	fmt.Println(packet[5])
+	fmt.Println(string(packet[6:]))
+	fmt.Println("----")
+	return packet
 }
 
 func encode_metadata_request(piece_number int) (string) {
@@ -80,8 +105,8 @@ func decode_metadata_request(payload []byte) {
 	fmt.Println(result)
 }
 
-func decode_handshake(payload []byte) (*ExtendedMessagePayload) { // not sure what to do with result yet, no return value
-	var result = ExtendedMessagePayload{nil, "v", 0, 0, 0}
+func decode_handshake(payload []byte) (*Extended_Handshake_Payload) { // not sure what to do with result yet, no return value
+	var result = Extended_Handshake_Payload{nil, "v", 0, 0, 0}
 	//var result = make([]ExtendedMessagePayload, 0)
 	reader := bytes.NewReader([]byte(payload))
 	bencode.Unmarshal(reader, &result)
