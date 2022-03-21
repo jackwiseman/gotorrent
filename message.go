@@ -76,13 +76,13 @@ func (message *Extended_Message) marshall() ([]byte) {
 	packet = append(packet, uint8(message.extended_id))
 	packet = append(packet, message.payload...)
 
-	fmt.Println("----")
-	fmt.Println("Here's what was marshalled:")
-	fmt.Println(binary.BigEndian.Uint32(packet[0:]))
-	fmt.Println(packet[4])
-	fmt.Println(packet[5])
-	fmt.Println(string(packet[6:]))
-	fmt.Println("----")
+	// fmt.Println("----")
+	// fmt.Println("Here's what was marshalled:")
+	// fmt.Println(binary.BigEndian.Uint32(packet[0:]))
+	// fmt.Println(packet[4])
+	// fmt.Println(packet[5])
+	// fmt.Println(string(packet[6:]))
+	// fmt.Println("----")
 	return packet
 }
 
@@ -96,13 +96,14 @@ func encode_metadata_request(piece_number int) (string) {
 	return b.String()
 }
 
-func decode_metadata_request(payload []byte) {
+func decode_metadata_request(payload []byte) (Metadata_Response) {
 	var result = Metadata_Response{0, 0, 0}
 	reader := bytes.NewReader([]byte(payload))
 	bencode.Unmarshal(reader, &result)
 	fmt.Println("Response: {'msg_type': " + strconv.Itoa(result.Msg_type) + ", 'piece': " + strconv.Itoa(result.Msg_type) + "}")
 	fmt.Println("Raw:")
 	fmt.Println(result)
+	return result
 }
 
 func decode_handshake(payload []byte) (*Extended_Handshake_Payload) { // not sure what to do with result yet, no return value
