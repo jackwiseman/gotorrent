@@ -163,13 +163,13 @@ func (tracker *Tracker) scrape(torrent *Torrent) (error) {
 	return nil
 }
 
-func (tracker *Tracker) announce(torrent *Torrent) (error) {
+// announce to a tracker requesting num_peers ip addresses
+// returns # of seeders
+func (tracker *Tracker) announce(torrent *Torrent, num_want int) (int, error) {
 	for i := 0; i <= tracker.retries; i++ {
 		transaction_id, err := get_transaction_id(); if err != nil {
-			return(err)
+			return 0, err
 		}
-
-		num_want := torrent.max_peers
 
 		// Create announce packet
 		packet := make([]byte, 98)
@@ -182,8 +182,8 @@ func (tracker *Tracker) announce(torrent *Torrent) (error) {
 		// info_hash
 		copy(packet[16:], torrent.info_hash)
 		// peer_id (20 bytes)
-		peer_id := "GoLangTorrent_v0.0.1"
-		copy(packet[36:], []byte(peer_id)) // not sure if this will even be accepted
+		peer_id := "GoLangTorrent_v0.0.1" // should be randomly set
+		copy(packet[36:], []byte(peer_id))
 		// downloaded
 		binary.BigEndian.PutUint64(packet[56:], 0)
 		// left
@@ -202,47 +202,36 @@ func (tracker *Tracker) announce(torrent *Torrent) (error) {
 		binary.BigEndian.PutUint16(packet[96:], 6881)
 
 		// Set timeout
-		tracker.conn.SetWriteDeadline(time.Now().Add(tracker.timeout))
+		//tracker.conn.SetWriteDeadline(time.Now().Add(tracker.timeout))
 
-		bytes_written, err := tracker.conn.Write(packet); if err != nil {
-			return(err)
-		}
-		if bytes_written < len(packet) {
-			return errors.New("Error: did not write announce request")
+		bytes_written, err := tracker.conn.Write(packet)
+		if err != nil || bytes_written < len(packet) {
+			return 0, errors.New("Error: could not write announce request")
 		}
 
 		buf := make([]byte, 20 + (6 * num_want))
-		// Per BitTorrent.org specificiations, "If a response is not recieved after 15 * 2 ^ n seconds, client should retransmit, where n increases to 8 from 0
-		tracker.conn.SetReadDeadline(time.Now().Add(time.Second * time.Duration(int(15 * math.Pow(2,float64(i))))))
+		tracker.conn.SetReadDeadline(time.Now().Add(time.Second * time.Duration(int(15 * math.Pow(2,float64(i)))))) // BEP 15 - If a response is not received after 15 * 2 ^ n seconds, the client should retransmit the request, where n starts at 0 and is increased up to 8 (3840 seconds) after every retransmission
 
 		bytes_read, err := tracker.conn.Read(buf)
-		fmt.Printf("\nRead %d bytes from %s\n", bytes_read, tracker.link)
-		if err != nil {
-			if i == tracker.retries {
-				return(err)
+		if (bytes_read < 20 || err != nil) {
+			if i >= tracker.retries {
+				return 0, err
 			}
-		} else {
-			// since we don't know exactly how many ips we'll get in return, we just need to ensure we got at least 20 bytes
-			if bytes_read < 20 {
-				fmt.Println("Error: did not read correct # of bytes")
-				fmt.Printf("\nGot %d bytes", bytes_read)
-				fmt.Println("Retrying...")
-			} else {
-				seeders := binary.BigEndian.Uint32(buf[16:])
-				for j := 0; j < int(math.Min(float64(num_want), float64(seeders))); j++ {
-					ip_address_raw := binary.BigEndian.Uint32(buf[20 + (6 * j):])
-					port := binary.BigEndian.Uint16(buf[24 + (6 * j):])
-
-					// convert ip_address into a string representation
-					ip_address := make(net.IP, 4)
-					binary.BigEndian.PutUint32(ip_address, ip_address_raw)
-
-					torrent.peers = append(torrent.peers, *new_peer(ip_address.String(), strconv.Itoa(int(port)), torrent))
-				}
-				return nil
-			}
+			continue
 		}
 
+		seeders := int(binary.BigEndian.Uint32(buf[16:]))
+		for j := 0; j < int(math.Min(float64(num_want), float64(seeders))); j++ {
+			ip_address_raw := binary.BigEndian.Uint32(buf[20 + (6 * j):])
+			port := binary.BigEndian.Uint16(buf[24 + (6 * j):])
+
+			// convert ip_address into a string representation
+			ip_address := make(net.IP, 4)
+			binary.BigEndian.PutUint32(ip_address, ip_address_raw)
+
+			torrent.peers = append(torrent.peers, *new_peer(ip_address.String(), strconv.Itoa(int(port)), torrent))
+		}
+		return seeders, nil
 	}
-	return nil
+	return 0, errors.New("Tracker timed out")
 }
