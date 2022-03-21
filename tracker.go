@@ -216,6 +216,7 @@ func (tracker *Tracker) announce(torrent *Torrent) (error) {
 		tracker.conn.SetReadDeadline(time.Now().Add(time.Second * time.Duration(int(15 * math.Pow(2,float64(i))))))
 
 		bytes_read, err := tracker.conn.Read(buf)
+		fmt.Printf("\nRead %d bytes from %s\n", bytes_read, tracker.link)
 		if err != nil {
 			if i == tracker.retries {
 				return(err)

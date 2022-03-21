@@ -46,7 +46,7 @@ func (peer *Peer) run(torrent *Torrent, p_wg *sync.WaitGroup) {
 	//fmt.Println("Connecting...")
 	err := peer.connect()
 	if err != nil {
-		//fmt.Println("Bad peer")
+		fmt.Println("Bad peer")
 		return
 	}
 	//fmt.Println("Handshaking...")
