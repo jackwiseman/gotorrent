@@ -112,7 +112,7 @@ func (torrent *Torrent) find_peers() {
 	var wg sync.WaitGroup
 
 	// TODO: fix bad trackers?
-	for i := 1; i < len(torrent.trackers); i++ {
+	for i := 0; i < len(torrent.trackers); i++ {
 		wg.Add(1)
 		go func(wg *sync.WaitGroup, tracker Tracker) {
 			defer wg.Done()
@@ -128,7 +128,12 @@ func (torrent *Torrent) find_peers() {
 				return
 			}
 
-			tracker.announce(torrent)
+			seeders, err := tracker.announce(torrent, 0)
+			if err != nil {
+				return
+			}
+
+			_, err = tracker.announce(torrent, seeders)
 			if err != nil {
 				return
 			}
@@ -138,10 +143,30 @@ func (torrent *Torrent) find_peers() {
 	}
 	wg.Wait()
 
-	// trim excess peers
+	// remove duplicate peers
+
+
+	fmt.Printf("Found %d peers", len(torrent.peers))
+	fmt.Println("Trimming...")
+	torrent.remove_duplicate_peers()
+	fmt.Println("Finished trim with %d peers left", len(torrent.peers))
 	if len(torrent.peers) > torrent.max_peers {
 		torrent.peers = torrent.peers[0:torrent.max_peers]
 	}
+}
+
+func (torrent *Torrent) remove_duplicate_peers() {
+    seen := map[string]bool{}
+    trimmed := []Peer{}
+    
+    for i := range torrent.peers {
+        if !seen[torrent.peers[i].ip] {
+            seen[torrent.peers[i].ip] = true
+            trimmed = append(trimmed, torrent.peers[i])
+        } else {
+	}
+    }
+    torrent.peers = trimmed
 }
 
 func metadata_constructor(ch chan Metadata_Piece, metadata_raw *map[int][]byte, pieces *[]int) {
@@ -155,58 +180,6 @@ func metadata_constructor(ch chan Metadata_Piece, metadata_raw *map[int][]byte, 
 		(*pieces)[piece.piece_num] = 1
 	}
 }
-
-//func (torrent *Torrent) get_metadata() {
-//	// first let's find an alive peer to find the size of the file
-
-//	var metadata_peers []Peer
-//	pieces := make([]int, torrent.num_metadata_pieces()) // array of [0, 0, 0, 0, 0, 0, ...] denoting the pieces we have
-
-//	var handshake_wg sync.WaitGroup
-//	// populate array with peers who can send metadata
-//	for i := 0; i < len(torrent.peers)-1;  i++ {
-//		handshake_wg.Add(1)
-//		go func(wg *sync.WaitGroup, metadata_peers *[]Peer, peer Peer) {
-//			fmt.Println("Connecting to " + peer.ip)
-//			defer wg.Done()
-//			peer.connect()
-//			peer.perform_handshake(torrent)
-//			if peer.uses_extended {
-//				_, supports_metadata := peer.extensions["ut_metadata"]
-//				if supports_metadata {
-//					*metadata_peers = append(*metadata_peers, peer)
-//					return // don't disconnect from them if they have the info we need, obviously we're going to need to keep ALL of these connections alive eventually, but this is the initial step
-//				}
-//			}
-//			torrent.peers[i].disconnect()
-//		} (&handshake_wg, &metadata_peers, torrent.peers[i])
-//	}
-
-//	handshake_wg.Wait()
-
-//	fmt.Println("Found " + strconv.Itoa(len(metadata_peers)) + " peers willing to send metadata")
-//	fmt.Println(metadata_peers)
-
-//	for i := 0; i < torrent.num_metadata_pieces(); i++ {
-//		pieces = append(pieces, 0)
-//	}
-
-//	rand.Seed(time.Now().UnixNano())
-
-//	// start a goroutine for each metadata peer (might not work if peers > pieces)
-//	var metadata_collect sync.WaitGroup
-//	for i := 0; i < len(metadata_peers); i++ {
-//		metadata_collect.Add(1)
-//		//go metadata_peers[i].request_metadata(&(torrent.metadata_raw), &pieces, &metadata_collect, torrent.metadata_size)
-//	}
-
-//	metadata_collect.Wait()
-
-//	err := os.WriteFile("metadata.torrent", torrent.metadata_raw, 0644)
-//	if err != nil {
-//		panic(err)
-//	}
-//}
 
 // assumes the filename is "metadata.torrent", which of course will not be valid in the future if there are multiple torrents
 func (torrent *Torrent) parse_metadata_file() {
