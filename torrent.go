@@ -234,6 +234,8 @@ func (torrent *Torrent) start_download() {
 	// get num_want peers
 	torrent.find_peers()
 
+	torrent.print_info()
+
 	var wg sync.WaitGroup
 
 	for i := 0; i < len(torrent.peers); i++ {
