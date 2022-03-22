@@ -68,10 +68,9 @@ func (ch *Connection_Handler) remove_connection(peer *Peer) {
 		for i := 0; i < len(ch.active_connections); i++ {
 			if ch.active_connections[i].ip == peer.ip {
 				ch.active_connections[i] = ch.active_connections[len(ch.active_connections) - 1]
-				ch.active_connections = ch.active_connections[:len(ch.active_connections) - 2] 
+				ch.active_connections = ch.active_connections[:len(ch.active_connections) - 1] 
 			}
 		}
-	}
 	ch.edit_connected_peers.Unlock()
 }
 
