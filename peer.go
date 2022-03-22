@@ -6,6 +6,7 @@ import (
 	"time"
 	"errors"
 	"fmt"
+	"log"
 	"encoding/binary"
 )
 
@@ -23,6 +24,8 @@ type Peer struct {
 	// wrapped io.Reader/io.Writer interfaces
 	pw *Peer_Writer
 	pr *Peer_Reader
+
+	logger *log.Logger
 }
 
 func (peer *Peer) set_extensions(extensions map[string]int) {
@@ -35,6 +38,7 @@ func new_peer(ip string, port string, torrent *Torrent) (*Peer) {
 	peer.ip = ip
 	peer.port = port
 	peer.torrent = torrent
+	peer.logger = log.New(peer.torrent.log_file, "[Peer] " + peer.ip + ": ", log.Ltime | log.Lshortfile)
 
 	return &peer
 }
@@ -56,7 +60,7 @@ func (peer *Peer) run(connected *[]Peer, mx *sync.Mutex) {
 		}
 		mx.Unlock()
 	} (connected, mx)
-//	defer fmt.Println(" -- Peer disconnected")
+	defer peer.logger.Println("Peer disconnected")
 
 	//fmt.Println("Connecting...")
 	err := peer.connect()

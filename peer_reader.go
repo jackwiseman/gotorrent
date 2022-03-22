@@ -2,14 +2,11 @@ package main
 
 import (
 	"net"
+	"log"
 	"time"
-	"errors"
 	"strconv"
+	"errors"
 	"sync"
-	"io"
-//	"time"
-//	"bufio"
-	"fmt"
 	"encoding/binary"
 	"bytes"
 )
@@ -18,6 +15,7 @@ import (
 type Peer_Reader struct {
 	peer *Peer
 	conn net.Conn
+	logger *log.Logger
 
 //	reader bufio.Reader
 //	buf_size int
@@ -28,6 +26,7 @@ func new_peer_reader(peer *Peer) (*Peer_Reader) {
 	var pr Peer_Reader
 	pr.conn = peer.conn
 	pr.peer = peer
+	pr.logger = log.New(peer.torrent.log_file, "[Peer Reader] " + pr.peer.ip + ": ", log.Ltime | log.Lshortfile)
 	return &pr
 }
 
@@ -37,93 +36,86 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 	defer pr.peer.pw.stop()
 
 	for {
+		// disconnect if we don't receive a KEEP ALIVE (or any message) for 2 minutes
 		pr.conn.SetReadDeadline(time.Now().Add(time.Minute * time.Duration(2)))
-//		fmt.Println("Waiting for message")
+
 		length_prefix_buf := make([]byte, 4)
 		_, err := pr.conn.Read(length_prefix_buf)
 		if err != nil {
-			if err == io.EOF {
-//				fmt.Println("Peer closed connection")
-				return
-			}
-			fmt.Println(err)
+			pr.logger.Println(err)
+			return
 		}
 
 		length_prefix := int(binary.BigEndian.Uint32(length_prefix_buf))
-//		fmt.Printf("Received length_prefix of %d\n", length_prefix)
 		
-		if length_prefix == 0 { // keepalive
-//			fmt.Println("Received keepalive")
-		//	pr.peer.pw.stop()
-//			fmt.Println("Moving to next peer for now")
-			return
-//			continue
+		if length_prefix == 0 {
+			pr.logger.Println("Received KEEP ALIVE")
+			continue
 		}
 
 		message_id_buf := make([]byte, 1)
 		_, err = pr.conn.Read(message_id_buf)
 		if err != nil {
-			if err == io.EOF {
-//				fmt.Println("Peer closed connection")
-		//		pr.peer.pw.stop()
-				return
-			}
-			fmt.Println(err)
+			pr.logger.Println(err)
+			return
 		}
 
 		message_id := int(message_id_buf[0])
 
-//		fmt.Printf("\nLength: %d, Message_id: %d\n", length_prefix, message_id)
+		pr.logger.Printf("Message received - Length: %d, Message_id: %d\n", length_prefix, message_id)
 		
 		switch int(message_id) {
 			// no payload
 			case CHOKE:
-//				fmt.Println("Received choke")
+				pr.logger.Println("Received CHOKE")
 				continue
 			case UNCHOKE:
-//				fmt.Println("Received unchoke")
+				pr.logger.Println("Received UNCHOKE")
 				continue
 			case INTERESTED:
-//				fmt.Println("Received interrested")
+				pr.logger.Println("Received INTERRESTED")
 				continue
 			case NOT_INTERESTED:
-//				fmt.Println("Received not interrested")
+				pr.logger.Println("Received NOT INTERRESTED")
 				continue
 			case HAVE:
-				fmt.Println("Received have")
+				pr.logger.Println("Received HAVE")
 			case BITFIELD:
-				fmt.Println("Received bitfield")
+				pr.logger.Println("Received BITFIELD")
 				bitfield_buf := make([]byte, length_prefix - 1)
 				_, err = pr.conn.Read(bitfield_buf)
 				if err != nil {
-					fmt.Println(err)
+					pr.logger.Println(err)
+					return
 				}
 				pr.peer.bitfield = bitfield_buf
 			case REQUEST:
-				fmt.Println("Received request")
+				pr.logger.Println("Received REQUEST")
 			case PIECE:
-				fmt.Println("Received piece")
+				pr.logger.Println("Received PIECE")
 			case CANCEL:
-				fmt.Println("Received cancel")
+				pr.logger.Println("Received CANCEL")
 			case PORT:
-				fmt.Println("Received port")
+				pr.logger.Println("Received PORT")
 			case EXTENDED:
-				fmt.Println("Received extended!!")
+				pr.logger.Println("Received EXTENDED")
 				extended_id_buf := make([]byte, 1)
 				_, err = pr.conn.Read(extended_id_buf)
 				if err != nil {
-					fmt.Println(err)
+					pr.logger.Println(err)
+					return
 				}
 
 				if extended_id_buf[0] != uint8(0) {
-					fmt.Println("Received unsupported extended message")
+					pr.logger.Println("Received unsupported extended message")
 					continue
 				}
 
 				payload_buf := make([]byte, length_prefix - 2)
 				_, err = pr.conn.Read(payload_buf)
 				if err != nil {
-					fmt.Println(err)
+					pr.logger.Println(err)
+					return
 				}
 
 				bencode_end := bytes.Index(payload_buf, []byte("ee")) + 2
@@ -132,7 +124,7 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 				response := decode_metadata_request(bencode)
 				
 				if response.Msg_type == 2 { // reject
-					fmt.Println("Peer does not have piece")
+					pr.logger.Println("Peer does not have requested metadata piece")
 					continue
 				}
 
@@ -147,23 +139,21 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 			
 				err = pr.peer.torrent.set_metadata_piece(response.Piece, metadata_piece)
 				if err != nil {
-					fmt.Println(errors.New("Error in setting metadata piece\n - len_prefix: " + strconv.Itoa(length_prefix) + "\n - message_id: " + strconv.Itoa(message_id) + "\n - bencode info: " + string(bencode) + "\n - raw length " + strconv.Itoa(len(pr.peer.torrent.metadata_raw))))
+					pr.logger.Println(errors.New("Error in setting metadata piece\n - len_prefix: " + strconv.Itoa(length_prefix) + "\n - message_id: " + strconv.Itoa(message_id) + "\n - bencode info: " + string(bencode) + "\n - raw length " + strconv.Itoa(len(pr.peer.torrent.metadata_raw))))
 				}
-//				fmt.Println(pr.peer.torrent.metadata_raw)
 				
 				if before_append != pr.peer.torrent.has_all_metadata() { // true iff we inserted the last piece
 					err = pr.peer.torrent.build_metadata_file(pr.peer.ip + ".torrent")
 					if err != nil {
-//						panic(fmt.Printf("Error dump: %d, %d", length_prefix, message_id)
-						fmt.Println(errors.New("Error: len_prefix:" + strconv.Itoa(length_prefix) + ", message_id:" + strconv.Itoa(message_id)))
-				//		panic(err)
+						pr.logger.Println(err)
+						return
 					}
 				}
 
 				pr.peer.torrent.metadata_mx.Unlock()
 
 			default:
-				fmt.Println("Received bad message_id")
+				pr.logger.Println("Received bad message_id")
 		}
 
 	}
