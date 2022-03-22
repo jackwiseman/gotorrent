@@ -39,21 +39,37 @@ func new_peer(ip string, port string, torrent *Torrent) (*Peer) {
 	return &peer
 }
 
-func (peer *Peer) run(torrent *Torrent, p_wg *sync.WaitGroup) {
+func (peer *Peer) run(connected *[]Peer, mx *sync.Mutex) {
 	defer peer.disconnect()
-	defer p_wg.Done()
+	defer func (connected *[]Peer, mx *sync.Mutex) {
+		mx.Lock()
+		// swap current peer with end of connected slice and return all but that element
+		if len(*connected) == 1 {
+			*connected = []Peer{}
+		} else {
+			for i := 0; i < len(*connected); i++ {
+				if (*connected)[i].ip == peer.ip {
+					(*connected)[i] = (*connected)[len(*connected) - 1]
+					*connected = (*connected)[:len(*connected) - 2] 
+				}
+			}
+		}
+		mx.Unlock()
+	} (connected, mx)
+//	defer fmt.Println(" -- Peer disconnected")
 
 	//fmt.Println("Connecting...")
 	err := peer.connect()
 	if err != nil {
-		fmt.Println("Bad peer")
+//		fmt.Println("Bad peer")
+		fmt.Println(err)
 		return
 	}
 	//fmt.Println("Handshaking...")
-	peer.perform_handshake(torrent)
+	peer.perform_handshake()
 
 	if err != nil {
-		//fmt.Println("Bad handshake")
+//		fmt.Println("Bad handshake")
 		fmt.Println(err)
 		return
 	}
@@ -61,17 +77,14 @@ func (peer *Peer) run(torrent *Torrent, p_wg *sync.WaitGroup) {
 	//fmt.Println("Getting bitfield...")
 	peer.get_bitfield()
 	if err != nil {
-		//fmt.Println("Bad bitfield")
+//		fmt.Println("Bad bitfield")
 		fmt.Println(err)
 		return
 	}
 
 	var wg sync.WaitGroup
 
-	_, ok := peer.extensions["ut_metadata"]
-        if !ok {
-                return
-        }
+	
 	//fmt.Println("Running Peer_Reader/Peer_Writer")
 	wg.Add(2)
 	go peer.pr.run(&wg)
@@ -81,9 +94,20 @@ func (peer *Peer) run(torrent *Torrent, p_wg *sync.WaitGroup) {
 	wg.Wait()
 }
 
+func (peer *Peer) supports_metadata_requests() (bool) {
+	if !peer.uses_extended {
+		return false
+	}
+	_, ok := peer.extensions["ut_metadata"]
+        if !ok {
+                return false
+        }
+	return true
+}
+
 // Connect to peer via TCP and create a peer_reader over connection
 func (peer *Peer) connect() (error) {
-	timeout := time.Second * 3
+	timeout := time.Second * 10 
 	conn, err := net.DialTimeout("tcp", peer.ip + ":" + peer.port, timeout)
 
 	if err != nil {
@@ -104,12 +128,12 @@ func (peer *Peer) disconnect() {
 	}
 }
 
-func (peer *Peer) perform_handshake (torrent *Torrent) (error) {
+func (peer *Peer) perform_handshake () (error) {
 	if peer.conn == nil {
 		return errors.New("Error: peer's connection is nil")
 	}
 
-	outgoing_handshake := get_handshake_message(torrent)
+	outgoing_handshake := get_handshake_message(peer.torrent)
 	_, err := peer.conn.Write(outgoing_handshake)
 	if err != nil {
 		peer.is_alive = false
@@ -164,10 +188,10 @@ func (peer *Peer) perform_handshake (torrent *Torrent) (error) {
 		result := decode_handshake(buf[2:])
 		peer.set_extensions(result.M)
 
-		if result.Metadata_size != 0 && torrent.metadata_size == 0 { // make sure they attached metadata size, also no reason to overwrite if we already set
-			torrent.metadata_size = result.Metadata_size
-			torrent.metadata_raw = make([]byte, result.Metadata_size)
-			torrent.metadata_pieces = make([]byte, torrent.num_metadata_pieces())
+		if result.Metadata_size != 0 && peer.torrent.metadata_size == 0 { // make sure they attached metadata size, also no reason to overwrite if we already set
+			peer.torrent.metadata_size = result.Metadata_size
+			peer.torrent.metadata_raw = make([]byte, result.Metadata_size)
+			peer.torrent.metadata_pieces = make([]byte, peer.torrent.num_metadata_pieces())
 			//	fmt.Println("Metadata size:")
 			//	fmt.Println(torrent.metadata_size)
 			//	fmt.Println("Pieces: ")

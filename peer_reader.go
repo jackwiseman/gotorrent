@@ -2,6 +2,7 @@ package main
 
 import (
 	"net"
+	"time"
 	"errors"
 	"strconv"
 	"sync"
@@ -36,6 +37,7 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 	defer pr.peer.pw.stop()
 
 	for {
+		pr.conn.SetReadDeadline(time.Now().Add(time.Minute * time.Duration(2)))
 //		fmt.Println("Waiting for message")
 		length_prefix_buf := make([]byte, 4)
 		_, err := pr.conn.Read(length_prefix_buf)
@@ -44,7 +46,7 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 //				fmt.Println("Peer closed connection")
 				return
 			}
-			panic(err)
+			fmt.Println(err)
 		}
 
 		length_prefix := int(binary.BigEndian.Uint32(length_prefix_buf))
@@ -66,7 +68,7 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 		//		pr.peer.pw.stop()
 				return
 			}
-			panic(err)
+			fmt.Println(err)
 		}
 
 		message_id := int(message_id_buf[0])
@@ -94,7 +96,7 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 				bitfield_buf := make([]byte, length_prefix - 1)
 				_, err = pr.conn.Read(bitfield_buf)
 				if err != nil {
-					panic(err)
+					fmt.Println(err)
 				}
 				pr.peer.bitfield = bitfield_buf
 			case REQUEST:
@@ -110,7 +112,7 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 				extended_id_buf := make([]byte, 1)
 				_, err = pr.conn.Read(extended_id_buf)
 				if err != nil {
-					panic(err)
+					fmt.Println(err)
 				}
 
 				if extended_id_buf[0] != uint8(0) {
@@ -121,7 +123,7 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 				payload_buf := make([]byte, length_prefix - 2)
 				_, err = pr.conn.Read(payload_buf)
 				if err != nil {
-					panic(err)
+					fmt.Println(err)
 				}
 
 				bencode_end := bytes.Index(payload_buf, []byte("ee")) + 2
@@ -145,7 +147,7 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 			
 				err = pr.peer.torrent.set_metadata_piece(response.Piece, metadata_piece)
 				if err != nil {
-					panic(errors.New("Error in setting metadata piece\n - len_prefix: " + strconv.Itoa(length_prefix) + "\n - message_id: " + strconv.Itoa(message_id) + "\n - bencode info: " + string(bencode) + "\n - raw length " + strconv.Itoa(len(pr.peer.torrent.metadata_raw))))
+					fmt.Println(errors.New("Error in setting metadata piece\n - len_prefix: " + strconv.Itoa(length_prefix) + "\n - message_id: " + strconv.Itoa(message_id) + "\n - bencode info: " + string(bencode) + "\n - raw length " + strconv.Itoa(len(pr.peer.torrent.metadata_raw))))
 				}
 //				fmt.Println(pr.peer.torrent.metadata_raw)
 				
@@ -153,7 +155,7 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 					err = pr.peer.torrent.build_metadata_file(pr.peer.ip + ".torrent")
 					if err != nil {
 //						panic(fmt.Printf("Error dump: %d, %d", length_prefix, message_id)
-						panic(errors.New("Error: len_prefix:" + strconv.Itoa(length_prefix) + ", message_id:" + strconv.Itoa(message_id)))
+						fmt.Println(errors.New("Error: len_prefix:" + strconv.Itoa(length_prefix) + ", message_id:" + strconv.Itoa(message_id)))
 				//		panic(err)
 					}
 				}

@@ -5,8 +5,10 @@ import (
 	"time"
 	"sync"
 	"bufio"
-	"fmt"
+	//"fmt"
 )
+
+const KEEP_ALIVE = uint8(0)
 
 type Peer_Writer struct {
 	conn net.Conn
@@ -44,7 +46,7 @@ func (pw *Peer_Writer) send_metadata_request(piece_num int) {
 	payload := encode_metadata_request(piece_num)
 	// marshall will ensure the length_prefix is set, we don't need to specify it here
 	pw.write_extended(Extended_Message{0, 20, uint8(pw.peer.extensions["ut_metadata"]), []byte(payload)})
-	fmt.Println("Requesting metadata...")
+	//fmt.Println("Requesting metadata...")
 }
 
 // use a time.Ticker to repeatedly request a metadata piece until we have the full file
@@ -63,11 +65,23 @@ func (pw *Peer_Writer) metadata_request_scheduler() {
 	}
 }
 
+func (pw *Peer_Writer) keep_alive_scheduler() {
+	ticker := time.NewTicker(2 * time.Minute)
+	for _ = range(ticker.C) {
+		pw.conn.Write([]byte{KEEP_ALIVE})
+	}
+	ticker.Stop() // this and other tickers might not stop
+}
+
+
+
 // will need to also include keepalive messages
 func (pw *Peer_Writer) run(wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	if !pw.peer.torrent.has_all_metadata() {
+	go pw.keep_alive_scheduler()
+
+	if !pw.peer.torrent.has_all_metadata() && pw.peer.supports_metadata_requests() {
 		// schedule piece requests every 5 seconds until it's collected, should set a global timeout
 		go pw.metadata_request_scheduler()
 	}
@@ -76,7 +90,8 @@ func (pw *Peer_Writer) run(wg *sync.WaitGroup) {
 		msg := <- pw.message_ch
 
 		if int(msg[4]) == STOP { // bad typecast comparison
-			fmt.Println("Peer_Writer received STOP, exiting...")
+			// Peer writer exits
+			// fmt.Println("Peer_Writer received STOP, exiting...")
 			return
 		}
 

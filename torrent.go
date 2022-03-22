@@ -42,8 +42,8 @@ func new_torrent(magnet_link string, max_peers int) (*Torrent) {
 	torrent.max_peers = max_peers
 	torrent.parse_magnet_link()
 
-//	var m sync.Mutex
-//	torrent.metadata_mx = &m
+	//	var m sync.Mutex
+	//	torrent.metadata_mx = &m
 	return &torrent
 }
 
@@ -143,42 +143,25 @@ func (torrent *Torrent) find_peers() {
 	}
 	wg.Wait()
 
-	// remove duplicate peers
-
-
-	fmt.Printf("Found %d peers", len(torrent.peers))
-	fmt.Println("Trimming...")
+	// fmt.Printf("Found %d peers\n", len(torrent.peers))
+	// fmt.Println("Trimming...")
 	torrent.remove_duplicate_peers()
-	fmt.Println("Finished trim with %d peers left", len(torrent.peers))
-	if len(torrent.peers) > torrent.max_peers {
-		torrent.peers = torrent.peers[0:torrent.max_peers]
-	}
+	// fmt.Printf("Finished trim with %d peers left\n", len(torrent.peers))
 }
 
+// remove all instances of repeating peer ip addresses from torrent.peers
 func (torrent *Torrent) remove_duplicate_peers() {
-    seen := map[string]bool{}
-    trimmed := []Peer{}
-    
-    for i := range torrent.peers {
-        if !seen[torrent.peers[i].ip] {
-            seen[torrent.peers[i].ip] = true
-            trimmed = append(trimmed, torrent.peers[i])
-        } else {
-	}
-    }
-    torrent.peers = trimmed
-}
+	seen := map[string]bool{}
+	trimmed := []Peer{}
 
-func metadata_constructor(ch chan Metadata_Piece, metadata_raw *map[int][]byte, pieces *[]int) {
-	for len(*metadata_raw) < len(*pieces) {
-		piece := <-ch
-		if piece.data == nil {
-			continue
+	for i := range torrent.peers {
+		if !seen[torrent.peers[i].ip] {
+			seen[torrent.peers[i].ip] = true
+			trimmed = append(trimmed, torrent.peers[i])
+		} else {
 		}
-		fmt.Println(*pieces)
-		(*metadata_raw)[piece.piece_num] = piece.data
-		(*pieces)[piece.piece_num] = 1
 	}
+	torrent.peers = trimmed
 }
 
 // assumes the filename is "metadata.torrent", which of course will not be valid in the future if there are multiple torrents
@@ -187,7 +170,7 @@ func (torrent *Torrent) parse_metadata_file() {
 	if err != nil {
 		panic(err)
 	}
-	
+
 	var result = Metadata{"", "", 0, "", 0, 0}
 	reader := bytes.NewReader(data)
 	err = bencode.Unmarshal(reader, &result)
@@ -196,25 +179,27 @@ func (torrent *Torrent) parse_metadata_file() {
 	}
 	torrent.metadata = result
 	torrent.display_name = torrent.metadata.Name
-	fmt.Println(result)
-//	return &result
+	//	return &result
 
 }
 func (torrent *Torrent) start_download() {
 	// ensure we have the metadata
-	torrent.parse_metadata_file()
+//	torrent.parse_metadata_file()
 
-	// get num_want peers
+	// get num_want peers and store in masterlist of peers
 	torrent.find_peers()
+
+	// eventually this will be backgrounded but ok to just connect for now
+	torrent.peer_connection_handler()
 
 	torrent.print_info()
 
-	var wg sync.WaitGroup
+	/*	var wg sync.WaitGroup
 
 	for i := 0; i < len(torrent.peers); i++ {
 		wg.Add(1)
 		go torrent.peers[i].run(torrent, &wg)
 	}
 
-	wg.Wait()
+	wg.Wait()*/
 }

@@ -2,10 +2,9 @@ package main
 
 import(
 	"encoding/binary"
-	"fmt"
+//	"fmt"
 	bencode "github.com/jackpal/bencode-go"
 	"bytes"
-	"strconv"
 )
 
 const(
@@ -21,7 +20,9 @@ const(
 	CANCEL = 8
 	PORT = 9
 	EXTENDED = 20
-	STOP = 99 // for internal use only
+
+	// for internal use only
+	STOP = 99 
 )
 
 // <length prefix><message ID><payload>
@@ -64,7 +65,7 @@ func (message *Message) marshall() ([]byte) {
 	packet := make([]byte, 4) // len_prefix (4) + id (1)
 	binary.BigEndian.PutUint32(packet[0:], message.length_prefix)
 	packet = append(packet, uint8(message.id))
-	fmt.Println(packet)
+	//fmt.Println(packet)
 	return packet
 }
 
@@ -76,13 +77,6 @@ func (message *Extended_Message) marshall() ([]byte) {
 	packet = append(packet, uint8(message.extended_id))
 	packet = append(packet, message.payload...)
 
-	// fmt.Println("----")
-	// fmt.Println("Here's what was marshalled:")
-	// fmt.Println(binary.BigEndian.Uint32(packet[0:]))
-	// fmt.Println(packet[4])
-	// fmt.Println(packet[5])
-	// fmt.Println(string(packet[6:]))
-	// fmt.Println("----")
 	return packet
 }
 
@@ -100,9 +94,9 @@ func decode_metadata_request(payload []byte) (Metadata_Response) {
 	var result = Metadata_Response{0, 0, 0}
 	reader := bytes.NewReader([]byte(payload))
 	bencode.Unmarshal(reader, &result)
-	fmt.Println("Response: {'msg_type': " + strconv.Itoa(result.Msg_type) + ", 'piece': " + strconv.Itoa(result.Msg_type) + "}")
-	fmt.Println("Raw:")
-	fmt.Println(result)
+//	fmt.Println("Response: {'msg_type': " + strconv.Itoa(result.Msg_type) + ", 'piece': " + strconv.Itoa(result.Msg_type) + "}")
+//	fmt.Println("Raw:")
+//	fmt.Println(result)
 	return result
 }
 
@@ -124,6 +118,7 @@ func get_handshake_message(torrent *Torrent) ([]byte) {
 	copy(packet[1:], []byte(pstr))
 	packet[25] = 16
 	copy(packet[28:], torrent.info_hash)
+//	fmt.Println(string(torrent.info_hash))
 	peer_id := "GoLangTorrent_v0.0.1" // TODO: generate a random peer_id?
 	copy(packet[48:], []byte(peer_id))
 
