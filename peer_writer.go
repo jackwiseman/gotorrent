@@ -19,6 +19,10 @@ type Peer_Writer struct {
 	logger *log.Logger
 
 	message_ch chan []byte // probably need to initialize this?
+
+	// for scheduling purposes 
+	keep_alive_ticker time.Ticker
+	metadata_request_ticker time.Ticker
 }
 
 func new_peer_writer(peer *Peer) (*Peer_Writer) {
@@ -42,6 +46,8 @@ func (pw *Peer_Writer) write_extended(message Extended_Message) {
 
 func (pw *Peer_Writer) stop() {
 	pw.write(Message{1, STOP})
+	pw.keep_alive_ticker.Stop()
+	pw.metadata_request_ticker.Stop()
 }
 
 // request specified metadata piece
@@ -54,10 +60,10 @@ func (pw *Peer_Writer) send_metadata_request(piece_num int) {
 // use a time.Ticker to repeatedly request a metadata piece until we have the full file
 // todo make sure mutexes are used when checking pieces
 func (pw *Peer_Writer) metadata_request_scheduler() {
-	ticker := time.NewTicker(15 * time.Second)
-	for _ = range(ticker.C) {
+	metadata_request_ticker := time.NewTicker(15 * time.Second)
+	for _ = range(metadata_request_ticker.C) {
 		if pw.peer.torrent.has_all_metadata() {
-			ticker.Stop()
+			metadata_request_ticker.Stop()
 			return
 		}
 		pw.send_metadata_request(pw.peer.torrent.get_rand_metadata_piece())
@@ -65,14 +71,14 @@ func (pw *Peer_Writer) metadata_request_scheduler() {
 }
 
 func (pw *Peer_Writer) keep_alive_scheduler() {
-	ticker := time.NewTicker(1 * time.Minute)
-	for _ = range(ticker.C) {
+	keep_alive_ticker := time.NewTicker(1 * time.Minute)
+	for _ = range(keep_alive_ticker.C) {
 		keep_alive := make([]byte, 4)
 		binary.BigEndian.PutUint32(keep_alive, 0)
 		pw.logger.Println(keep_alive)
 		pw.conn.Write(keep_alive)
 	}
-	ticker.Stop() // this and other tickers might not stop
+	keep_alive_ticker.Stop() // this and other tickers might not stop
 }
 
 func (pw *Peer_Writer) run(wg *sync.WaitGroup) {

@@ -5,7 +5,6 @@ import (
 	"net"
 	"time"
 	"errors"
-	"fmt"
 	"log"
 	"encoding/binary"
 )
@@ -26,6 +25,7 @@ type Peer struct {
 	pr *Peer_Reader
 
 	logger *log.Logger
+
 }
 
 func (peer *Peer) set_extensions(extensions map[string]int) {
@@ -38,63 +38,39 @@ func new_peer(ip string, port string, torrent *Torrent) (*Peer) {
 	peer.ip = ip
 	peer.port = port
 	peer.torrent = torrent
-	peer.logger = log.New(peer.torrent.log_file, "[Peer] " + peer.ip + ": ", log.Ltime | log.Lshortfile)
+	peer.logger = log.New(peer.torrent.log_file, "[Peer] " + peer.ip + ": ", 0/*log.Ltime | log.Lshortfile*/)
 
 	return &peer
 }
 
-func (peer *Peer) run(connected *[]Peer, mx *sync.Mutex) {
-	defer peer.disconnect()
-	defer func (connected *[]Peer, mx *sync.Mutex) {
-		mx.Lock()
-		// swap current peer with end of connected slice and return all but that element
-		if len(*connected) == 1 {
-			*connected = []Peer{}
-		} else {
-			for i := 0; i < len(*connected); i++ {
-				if (*connected)[i].ip == peer.ip {
-					(*connected)[i] = (*connected)[len(*connected) - 1]
-					*connected = (*connected)[:len(*connected) - 2] 
-				}
-			}
-		}
-		mx.Unlock()
-	} (connected, mx)
-	defer peer.logger.Println("Peer disconnected")
+func (peer *Peer) run(connected *[]Peer) {
+	defer peer.disconnect() // ideally this mutex shouldn't just be passed around as much
 
-	//fmt.Println("Connecting...")
+	peer.logger.Printf("Connecting")
 	err := peer.connect()
 	if err != nil {
-//		fmt.Println("Bad peer")
-		fmt.Println(err)
+		peer.logger.Println("Connection error: " + err.Error())
 		return
 	}
-	//fmt.Println("Handshaking...")
-	peer.perform_handshake()
+	err = peer.perform_handshake()
 
 	if err != nil {
-//		fmt.Println("Bad handshake")
-		fmt.Println(err)
+		peer.logger.Println("Handshake error: " + err.Error())
 		return
 	}
 
-	//fmt.Println("Getting bitfield...")
-	peer.get_bitfield()
+	err = peer.get_bitfield()
 	if err != nil {
-//		fmt.Println("Bad bitfield")
-		fmt.Println(err)
+		peer.logger.Println("Bitfield error: " + err.Error())
 		return
 	}
 
 	var wg sync.WaitGroup
 
-	
-	//fmt.Println("Running Peer_Reader/Peer_Writer")
 	wg.Add(2)
 	go peer.pr.run(&wg)
 	go peer.pw.run(&wg)
 
-	//fmt.Println("Waiting...")
 	wg.Wait()
 }
 
@@ -130,6 +106,8 @@ func (peer *Peer) disconnect() {
 	if peer.conn != nil { // need to look into this, also keeping it open
 		peer.conn.Close()
 	}
+	peer.torrent.conn_handler.remove_connection(peer)
+	peer.logger.Println("Disconnected")
 }
 
 func (peer *Peer) perform_handshake () (error) {
