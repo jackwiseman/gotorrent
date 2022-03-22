@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+//	"log"
+	"os"
 	"strings"
 	"strconv"
 	"encoding/hex"
@@ -28,6 +30,9 @@ type Torrent struct {
 	metadata Metadata
 
 	metadata_mx sync.Mutex // to ensure that that we only trigger "building" the metadata once
+
+	log_file *os.File
+
 }
 
 type Metadata_Piece struct {
@@ -38,6 +43,7 @@ type Metadata_Piece struct {
 // for simplicity, only magnet links will be supported for now
 func new_torrent(magnet_link string, max_peers int) (*Torrent) {
 	var torrent Torrent
+	torrent.log_file, _ = os.Create("debug.log")
 	torrent.magnet_link = magnet_link
 	torrent.max_peers = max_peers
 	torrent.parse_magnet_link()
