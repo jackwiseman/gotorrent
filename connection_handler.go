@@ -71,6 +71,7 @@ func (ch *Connection_Handler) remove_connection(peer *Peer) {
 				ch.active_connections = ch.active_connections[:len(ch.active_connections) - 1] 
 			}
 		}
+	}
 	ch.edit_connected_peers.Unlock()
 }
 
