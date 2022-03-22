@@ -33,6 +33,7 @@ type Torrent struct {
 
 	log_file *os.File
 
+	conn_handler *Connection_Handler
 }
 
 type Metadata_Piece struct {
@@ -47,6 +48,7 @@ func new_torrent(magnet_link string, max_peers int) (*Torrent) {
 	torrent.magnet_link = magnet_link
 	torrent.max_peers = max_peers
 	torrent.parse_magnet_link()
+	torrent.conn_handler = torrent.new_connection_handler()
 
 	//	var m sync.Mutex
 	//	torrent.metadata_mx = &m
@@ -196,7 +198,7 @@ func (torrent *Torrent) start_download() {
 	torrent.find_peers()
 
 	// eventually this will be backgrounded but ok to just connect for now
-	torrent.peer_connection_handler()
+	torrent.conn_handler.run()
 
 	torrent.print_info()
 
