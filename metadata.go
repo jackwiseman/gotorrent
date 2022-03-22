@@ -3,7 +3,7 @@ package main
 import (
 	"math/rand"
 	"errors"
-//	"fmt"
+	"fmt"
 	"math"
 	"time"
 	"os"
@@ -65,7 +65,7 @@ func (torrent *Torrent) set_metadata_piece(piece_num int, metadata_piece []byte)
 
 	// set as "have"
 	torrent.metadata_pieces[piece_num / int(3)] = torrent.metadata_pieces[piece_num / int(3)] | (1 << (3 - piece_num % 4))
-//	fmt.Println(torrent.metadata_raw)
+	fmt.Println(" -> Metadata.torrent")
 
 	return nil
 }
