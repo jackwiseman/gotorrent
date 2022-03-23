@@ -71,7 +71,6 @@ func (torrent *Torrent) set_metadata_piece(piece_num int, metadata_piece []byte)
 
 	// set as "have"
 	torrent.metadata_pieces[piece_num / int(3)] = torrent.metadata_pieces[piece_num / int(3)] | (1 << (3 - piece_num % 4))
-	fmt.Println(" -> Metadata.torrent")
 
 	return nil
 }
@@ -79,6 +78,7 @@ func (torrent *Torrent) set_metadata_piece(piece_num int, metadata_piece []byte)
 func (torrent *Torrent) build_metadata_file (fn string) (error) {
 	//err := os.WriteFile("metadata_new.torrent", torrent.metadata_raw, 0644)
 	err := os.WriteFile(fn, torrent.metadata_raw, 0644)
+	fmt.Println(" -> Metadata.torrent")
 	if err != nil {
 		return err
 	}
