@@ -91,7 +91,9 @@ func (pw *Peer_Writer) run(wg *sync.WaitGroup) {
 
 	go pw.keep_alive_scheduler()
 
-	if !pw.peer.torrent.has_all_metadata() && !pw.peer.supports_metadata_requests() {
+	pw.logger.Println(pw.peer.extensions)
+//	pw.logger.Println(pw.peer.torrent.has_all_metadata())
+	if !pw.peer.torrent.has_all_metadata() && pw.peer.supports_metadata_requests() {
 		// schedule piece requests every 5 seconds until it's collected, should set a global timeout
 		go pw.metadata_request_scheduler()
 	}
