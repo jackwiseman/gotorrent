@@ -37,6 +37,7 @@ func new_peer_writer(peer *Peer) (*Peer_Writer) {
 }
 
 func (pw *Peer_Writer) write(message Message) {
+	// TODO: investigate crash happening here
 	if pw.message_ch == nil {
 		return
 	}
