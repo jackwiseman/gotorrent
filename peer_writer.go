@@ -37,7 +37,6 @@ func new_peer_writer(peer *Peer) (*Peer_Writer) {
 }
 
 func (pw *Peer_Writer) write(message Message) {
-	pw.logger.Println(pw)
 	if pw.message_ch == nil {
 		return
 	}

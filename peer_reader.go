@@ -71,6 +71,7 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 				continue
 			case UNCHOKE:
 				pr.logger.Println("Received UNCHOKE")
+				pr.peer.choked = false
 				continue
 			case INTERESTED:
 				pr.logger.Println("Received INTERRESTED")
