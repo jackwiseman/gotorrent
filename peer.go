@@ -14,8 +14,8 @@ type Peer struct {
 	port string
 	conn net.Conn
 	uses_extended bool // false by default
-	is_alive bool // assume yes until a handshake fails
 	extensions map[string]int
+	choked bool // whether we are choked by this peer or not, will likely need a name change upon seed support
 	bitfield []byte
 
 	torrent *Torrent // associated torrent
@@ -38,6 +38,7 @@ func new_peer(ip string, port string, torrent *Torrent) (*Peer) {
 	peer.ip = ip
 	peer.port = port
 	peer.torrent = torrent
+	peer.choked = true
 	peer.logger = log.New(peer.torrent.log_file, "[Peer] " + peer.ip + ": ", 0/*log.Ltime | log.Lshortfile*/)
 
 	return &peer
@@ -92,7 +93,6 @@ func (peer *Peer) connect() (error) {
 	conn, err := net.DialTimeout("tcp", peer.ip + ":" + peer.port, timeout)
 
 	if err != nil {
-		peer.is_alive = false
 		return err
 	} 
 
@@ -124,7 +124,6 @@ func (peer *Peer) perform_handshake () (error) {
 	outgoing_handshake := get_handshake_message(peer.torrent)
 	_, err := peer.conn.Write(outgoing_handshake)
 	if err != nil {
-		peer.is_alive = false
 		return errors.New("Error: unable to write to peer")
 	}
 
@@ -132,7 +131,6 @@ func (peer *Peer) perform_handshake () (error) {
 	pstrlen_buf := make([]byte, 1)
 	_, err = peer.conn.Read(pstrlen_buf)
 	if err != nil {
-		peer.is_alive = false
 		return errors.New("Error: could not read from peer")
 	}
 
@@ -141,7 +139,6 @@ func (peer *Peer) perform_handshake () (error) {
 	buf := make([]byte, 48 + pstrlen)
 	_, err = peer.conn.Read(buf)
 	if err != nil {
-		peer.is_alive = false
 		return errors.New("Error: could not read from peer")
 	}
 
@@ -155,7 +152,6 @@ func (peer *Peer) perform_handshake () (error) {
 
 		bytes_written, err := peer.conn.Write(outgoing_extended_handshake)
 		if err != nil || bytes_written < len(outgoing_extended_handshake) {
-			peer.is_alive = false
 			return errors.New("Error: unable to write to peer in extended handshake")
 		}
 

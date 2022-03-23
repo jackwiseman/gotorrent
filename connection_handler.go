@@ -8,7 +8,7 @@ import (
 
 type Connection_Handler struct {
 	// contains all peers which are either active or connecting
-	active_connections []Peer
+	active_connections []*Peer
 	// index of where to grab next peer from torrent's master list of tracker-discovered peers
 	next_peer_index int
 	// ensures that peers are able to concurrently remove themselves from the connection handler
@@ -39,8 +39,9 @@ func (ch *Connection_Handler) run () {
 		for {
 			if ch.torrent.has_all_metadata() {
 				for p := 0; p < len(ch.active_connections); p++ {
-					ch.logger.Printf("I'd like to send_interrested message to %s", ch.active_connections[p].ip)
-					ch.active_connections[p].send_interested()
+					if ch.active_connections[p].choked {
+						ch.active_connections[p].send_interested()
+					}
 				}
 			}
 
@@ -59,7 +60,7 @@ func (ch *Connection_Handler) run () {
 				break
 			}
 
-			ch.active_connections = append(ch.active_connections, ch.torrent.peers[ch.next_peer_index])
+			ch.active_connections = append(ch.active_connections, &ch.torrent.peers[ch.next_peer_index])
 			go ch.torrent.peers[ch.next_peer_index].run()
 			ch.next_peer_index++
 		}
@@ -67,11 +68,10 @@ func (ch *Connection_Handler) run () {
 }
 
 // remove peer from the connection slice
-// likely needs mutex
 func (ch *Connection_Handler) remove_connection(peer *Peer) {
 	ch.edit_connected_peers.Lock()
 	if len(ch.active_connections) == 1 {
-		ch.active_connections = []Peer{}
+		ch.active_connections = []*Peer{}
 	} else {
 		for i := 0; i < len(ch.active_connections); i++ {
 			if ch.active_connections[i].ip == peer.ip {
