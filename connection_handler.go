@@ -37,22 +37,23 @@ func (ch *Connection_Handler) run () {
 		ch.logger.Println(ch.String())
 //		ch.logger.Printf("There are currently %d connected peers", len(ch.active_connections))
 		for {
-			// TODO: clean up this logic
-			// TODO: global force stop, disconnects all current peers
-
 			if len(ch.active_connections) >= ch.torrent.max_peers {
 				// no need to add more peers
 				break
 			}
 
 			if ch.next_peer_index >= len(ch.torrent.peers) - 1 {
+				if len(ch.active_connections) == 0 {
+					ch.logger.Println("Connected to all peers")
+					return
+				}
 				ch.logger.Printf("No more peers left to add")
 				// no more peers left to add
 				break
 			}
 
 			ch.active_connections = append(ch.active_connections, ch.torrent.peers[ch.next_peer_index])
-			go ch.torrent.peers[ch.next_peer_index].run(&ch.active_connections)
+			go ch.torrent.peers[ch.next_peer_index].run()
 			ch.next_peer_index++
 		}
 	}
@@ -77,6 +78,9 @@ func (ch *Connection_Handler) remove_connection(peer *Peer) {
 
 // Prints all alive connections
 func (ch *Connection_Handler) String() (string) {
+	if len(ch.active_connections) == 0 {
+		return "No peers connected"
+	}
 	var s string
 	for i:=0; i<len(ch.active_connections); i++ {
 		s += ch.active_connections[i].ip + " "

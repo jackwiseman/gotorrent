@@ -32,8 +32,8 @@ func new_peer_reader(peer *Peer) (*Peer_Reader) {
 
 // will need to also include keepalive messages
 func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
-	defer wg.Done()
 	defer pr.peer.pw.stop()
+	defer wg.Done()
 
 	for {
 		// disconnect if we don't receive a KEEP ALIVE (or any message) for 2 minutes
