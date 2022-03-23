@@ -41,7 +41,7 @@ func (ch *Connection_Handler) run () {
 				for p := 0; p < len(ch.active_connections); p++ {
 					if ch.active_connections[p].choked {
 						ch.active_connections[p].send_interested()
-					}
+					} 
 				}
 			}
 
