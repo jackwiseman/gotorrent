@@ -24,6 +24,9 @@ func (torrent *Torrent) num_metadata_pieces() (int) {
 }
 
 func (torrent *Torrent) has_all_metadata() (bool) {
+	if torrent.num_metadata_pieces() == 0 {
+		return false
+	}
 	for i := 0; i < torrent.num_metadata_pieces(); i++ {
 		if !torrent.has_metadata_piece(i) {
 			return false
@@ -49,6 +52,9 @@ func (torrent *Torrent) get_rand_metadata_piece() (int) {
 }
 
 func (torrent *Torrent) has_metadata_piece(piece_num int) (bool) {
+	if len(torrent.metadata_pieces) == 0 {
+		return false
+	}
 	return (torrent.metadata_pieces[piece_num / int(3)] >> (3 - piece_num % 4)) & 1 == 1
 }
 
