@@ -37,6 +37,10 @@ func new_peer_writer(peer *Peer) (*Peer_Writer) {
 }
 
 func (pw *Peer_Writer) write(message Message) {
+	pw.logger.Println(pw)
+	if pw.message_ch == nil {
+		return
+	}
 	pw.message_ch <- message.marshall()
 }
 
@@ -45,6 +49,7 @@ func (pw *Peer_Writer) write_extended(message Extended_Message) {
 }
 
 func (pw *Peer_Writer) stop() {
+	defer pw.logger.Println("Closed")
 	pw.write(Message{1, STOP})
 	if pw.keep_alive_ticker != nil {
 		pw.keep_alive_ticker.Stop()
@@ -91,10 +96,7 @@ func (pw *Peer_Writer) run(wg *sync.WaitGroup) {
 
 	go pw.keep_alive_scheduler()
 
-	pw.logger.Println(pw.peer.extensions)
-//	pw.logger.Println(pw.peer.torrent.has_all_metadata())
 	if !pw.peer.torrent.has_all_metadata() && pw.peer.supports_metadata_requests() {
-		// schedule piece requests every 5 seconds until it's collected, should set a global timeout
 		go pw.metadata_request_scheduler()
 	}
 
@@ -111,7 +113,6 @@ func (pw *Peer_Writer) run(wg *sync.WaitGroup) {
 
 		_, err := pw.conn.Write(msg)
 		if err != nil {
-			// closed connection, need to disable reader
 			return
 		}
 	}

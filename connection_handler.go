@@ -37,6 +37,13 @@ func (ch *Connection_Handler) run () {
 		ch.logger.Println(ch.String())
 //		ch.logger.Printf("There are currently %d connected peers", len(ch.active_connections))
 		for {
+			if ch.torrent.has_all_metadata() {
+				for p := 0; p < len(ch.active_connections); p++ {
+					ch.logger.Printf("I'd like to send_interrested message to %s", ch.active_connections[p].ip)
+					ch.active_connections[p].send_interested()
+				}
+			}
+
 			if len(ch.active_connections) >= ch.torrent.max_peers {
 				// no need to add more peers
 				break

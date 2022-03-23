@@ -102,6 +102,11 @@ func (peer *Peer) connect() (error) {
 	return nil
 }
 
+// Sends an INTERESTED message about the given torrent so that we can be unchoked
+func (peer *Peer) send_interested() {
+	peer.pw.write(Message{1, INTERESTED})
+}
+
 // TODO: ensure read/write are closed
 func (peer *Peer) disconnect() {
 	if peer.conn != nil { // need to look into this, also keeping it open
