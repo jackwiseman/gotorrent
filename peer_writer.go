@@ -50,7 +50,7 @@ func (pw *Peer_Writer) write_extended(message Extended_Message) {
 
 func (pw *Peer_Writer) stop() {
 	defer pw.logger.Println("Closed")
-	pw.write(Message{1, STOP})
+	pw.write(Message{1, STOP, nil})
 	if pw.keep_alive_ticker != nil {
 		pw.keep_alive_ticker.Stop()
 	}

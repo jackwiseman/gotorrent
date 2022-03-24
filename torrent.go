@@ -111,8 +111,10 @@ func (torrent Torrent) print_info() {
 			fmt.Println(" -- " + torrent.peers[i].ip)
 		}
 	}
-	if torrent.metadata_size != 0 {
-		fmt.Println("Metadata size: " + strconv.Itoa(torrent.metadata_size) + " (" + strconv.Itoa(torrent.num_metadata_pieces()) + " pieces)")
+	if torrent.has_all_metadata() {
+		fmt.Println("Metadata info (" + strconv.Itoa(torrent.metadata_size) + " bytes with " + strconv.Itoa(torrent.num_metadata_pieces()) + " pieces)")
+		fmt.Println("-------------")
+		fmt.Println(torrent.metadata.String())
 	}
 }
 
@@ -173,27 +175,24 @@ func (torrent *Torrent) remove_duplicate_peers() {
 }
 
 // assumes the filename is "metadata.torrent", which of course will not be valid in the future if there are multiple torrents
-func (torrent *Torrent) parse_metadata_file() {
+func (torrent *Torrent) parse_metadata_file() (error) {
 	data, err := ioutil.ReadFile("metadata.torrent")
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	var result = Metadata{"", "", 0, "", 0, 0}
 	reader := bytes.NewReader(data)
 	err = bencode.Unmarshal(reader, &result)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	torrent.metadata = result
 	torrent.display_name = torrent.metadata.Name
-	//	return &result
-
+	
+	return nil
 }
 func (torrent *Torrent) start_download() {
-	// ensure we have the metadata
-//	torrent.parse_metadata_file()
-
 	// get num_want peers and store in masterlist of peers
 	torrent.find_peers()
 
