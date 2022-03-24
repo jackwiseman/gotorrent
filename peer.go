@@ -104,7 +104,7 @@ func (peer *Peer) connect() (error) {
 
 // Sends an INTERESTED message about the given torrent so that we can be unchoked
 func (peer *Peer) send_interested() {
-	peer.pw.write(Message{1, INTERESTED})
+	peer.pw.write(Message{1, INTERESTED, nil})
 }
 
 // TODO: ensure read/write are closed
@@ -216,3 +216,8 @@ func (peer *Peer) get_bitfield () (error) {
 	peer.bitfield = bitfield_buf
 	return nil
 }
+
+// send a request message to peer asking for specified block
+//func (peer *Peer) request_block(piece_num int, block_num int) {
+//	peer.pw
+//}

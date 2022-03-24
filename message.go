@@ -30,6 +30,7 @@ const(
 type Message struct {
 	length_prefix uint32
 	id int
+	payload []byte
 }
 
 

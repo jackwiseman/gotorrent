@@ -4,8 +4,6 @@ import (
 	"net"
 	"log"
 	"time"
-	"strconv"
-	"errors"
 	"sync"
 	"encoding/binary"
 	"bytes"
@@ -140,15 +138,15 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 			
 				err = pr.peer.torrent.set_metadata_piece(response.Piece, metadata_piece)
 				if err != nil {
-					pr.logger.Println(errors.New("Error in setting metadata piece\n - len_prefix: " + strconv.Itoa(length_prefix) + "\n - message_id: " + strconv.Itoa(message_id) + "\n - bencode info: " + string(bencode) + "\n - raw length " + strconv.Itoa(len(pr.peer.torrent.metadata_raw))))
 				}
 				
 				if before_append != pr.peer.torrent.has_all_metadata() { // true iff we inserted the last piece
-					err = pr.peer.torrent.build_metadata_file(pr.peer.ip + ".torrent")
+					err = pr.peer.torrent.build_metadata_file()
 					if err != nil {
 						pr.logger.Println(err)
 						return
 					}
+					pr.peer.torrent.parse_metadata_file()
 				}
 
 				pr.peer.torrent.metadata_mx.Unlock()

@@ -2,6 +2,7 @@ package main
 
 import (
 	"math/rand"
+	"strconv"
 	"errors"
 	"fmt"
 	"math"
@@ -17,6 +18,11 @@ type Metadata struct {
 	// contains one of the following, where 'length' means there is one file, and 'files' means there are multiple, only single file downloads will be allowed for the moment
 	Length int "length"
 	Files int "files"
+}
+
+func (md *Metadata) String() (string) {
+	s := "Name: " + md.Name +"\nPiece length: " + strconv.Itoa(md.Piece_len) + "\nLength: " + strconv.Itoa(md.Length)
+	return s
 }
 
 func (torrent *Torrent) num_metadata_pieces() (int) {
@@ -75,9 +81,8 @@ func (torrent *Torrent) set_metadata_piece(piece_num int, metadata_piece []byte)
 	return nil
 }
 
-func (torrent *Torrent) build_metadata_file (fn string) (error) {
-	//err := os.WriteFile("metadata_new.torrent", torrent.metadata_raw, 0644)
-	err := os.WriteFile(fn, torrent.metadata_raw, 0644)
+func (torrent *Torrent) build_metadata_file () (error) {
+	err := os.WriteFile("metadata_new.torrent", torrent.metadata_raw, 0644)
 	fmt.Println(" -> Metadata.torrent")
 	if err != nil {
 		return err
