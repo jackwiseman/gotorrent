@@ -93,6 +93,46 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 				pr.logger.Println("Received REQUEST")
 			case PIECE:
 				pr.logger.Println("Received PIECE")
+
+				index_buf := make([]byte, 4)
+				begin_buf := make([]byte, 4)
+
+				_, err = pr.conn.Read(index_buf)
+				if err != nil {
+					pr.logger.Println(err)
+					return
+				}
+
+				_, err = pr.conn.Read(begin_buf)
+				if err != nil {
+					pr.logger.Println(err)
+					return
+				}
+
+				block_buf := make([]byte, length_prefix - 9)
+				total_read := 0
+				for total_read < length_prefix - 9 { // sometimes the block doesn't get fully read in one call here, TODO: investigate this behavior globally
+					temp_buf := make([]byte, len(block_buf))
+					n, err := pr.conn.Read(temp_buf)
+					if err != nil {
+						pr.logger.Println(err)
+						return
+					}
+					block_buf_remainder := block_buf[total_read + n:]
+					block_buf = append(block_buf[0:total_read], temp_buf[:n]...)
+					block_buf = append(block_buf, block_buf_remainder...)
+					pr.logger.Println(n)
+					total_read += n
+				}
+
+				index := int(binary.BigEndian.Uint32(index_buf))
+				begin := int(binary.BigEndian.Uint32(begin_buf))
+
+				pr.logger.Printf("Index: %d, Begin: %d", index, begin)
+				//pr.logger.Println(block_buf)
+				//pr.logger.Println(len(block_buf))
+
+				pr.peer.torrent.set_block(index, begin, block_buf)
 			case CANCEL:
 				pr.logger.Println("Received CANCEL")
 			case PORT:
