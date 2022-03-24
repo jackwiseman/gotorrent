@@ -4,6 +4,7 @@ import (
 	"fmt"
 //	"log"
 	"os"
+	"math"
 	"strings"
 	"strconv"
 	"encoding/hex"
@@ -21,24 +22,21 @@ type Torrent struct {
 	info_hash []byte
 
 	trackers []Tracker
-	peers []Peer
+	peers []Peer // all peers collected by the tracker, not necessarily connected
 	max_peers int
 
+	// Metadata-specific
 	metadata_size int // in bytes, given by first extended handshake
 	metadata_raw []byte
 	metadata_pieces []byte // array of [1/0, 1/0,...] denoting whether we have the piece or not
 	metadata Metadata
-
 	metadata_mx sync.Mutex // to ensure that that we only trigger "building" the metadata once
+
+	pieces []Piece
 
 	log_file *os.File
 
 	conn_handler *Connection_Handler
-}
-
-type Metadata_Piece struct {
-	piece_num int
-	data []byte
 }
 
 // for simplicity, only magnet links will be supported for now
@@ -55,6 +53,7 @@ func new_torrent(magnet_link string, max_peers int) (*Torrent) {
 	return &torrent
 }
 
+// TODO: overhaul on link parsing, this was a bit of a hack
 // only supporting udp links
 func (torrent *Torrent) parse_magnet_link() {
 	data := strings.Split(torrent.magnet_link, "&")
@@ -93,7 +92,6 @@ func (torrent *Torrent) parse_magnet_link() {
 			torrent.info_hash = hash
 		}
 	}
-
 }
 
 func (torrent Torrent) print_info() {
@@ -118,6 +116,8 @@ func (torrent Torrent) print_info() {
 	}
 }
 
+// send 2x announce requests to all trackers, the first to find out how many peers they have,
+// the second to request that many, so that we have a large pool to pull from
 func (torrent *Torrent) find_peers() {
 	var wg sync.WaitGroup
 
@@ -189,9 +189,19 @@ func (torrent *Torrent) parse_metadata_file() (error) {
 	}
 	torrent.metadata = result
 	torrent.display_name = torrent.metadata.Name
+
+	// create empty pieces slice
+	torrent.pieces = make([]Piece, int(math.Ceil(float64(torrent.metadata.Length) / float64(torrent.metadata.Piece_len))))
+	for i := 0; i < len(torrent.pieces)/* - 1*/; i++ {
+		torrent.pieces[i].blocks = make([]Block, torrent.metadata.Piece_len / (1024 * 16))
+	}
+	torrent.pieces[len(torrent.pieces) - 1].blocks = make([]Block, int(math.Ceil(float64(torrent.metadata.Length - (torrent.metadata.Piece_len * (len(torrent.pieces) - 1))) / float64(1024 * 16))))
+	fmt.Println(torrent.pieces)
 	
 	return nil
 }
+
+// "main" function of a torrent
 func (torrent *Torrent) start_download() {
 	// get num_want peers and store in masterlist of peers
 	torrent.find_peers()
