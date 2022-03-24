@@ -220,3 +220,8 @@ func (torrent *Torrent) start_download() {
 
 	wg.Wait()*/
 }
+
+func (torrent *Torrent) set_block(piece_index int, offset int, data []byte) {
+	torrent.pieces[piece_index].blocks[offset/BLOCK_LEN].data = data
+	fmt.Printf("\nPiece (%d, %d) recieved", piece_index, offset/BLOCK_LEN)
+}
