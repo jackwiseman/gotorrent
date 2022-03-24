@@ -1,3 +1,5 @@
 *.torrent
-main
 *.log
+
+main
+magnet_links.go

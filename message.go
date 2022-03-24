@@ -66,6 +66,9 @@ func (message *Message) marshall() ([]byte) {
 	packet := make([]byte, 4) // len_prefix (4) + id (1)
 	binary.BigEndian.PutUint32(packet[0:], message.length_prefix)
 	packet = append(packet, uint8(message.id))
+	if message.payload != nil {
+		packet = append(packet, message.payload...)
+	}
 	//fmt.Println(packet)
 	return packet
 }

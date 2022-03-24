@@ -104,7 +104,25 @@ func (peer *Peer) connect() (error) {
 
 // Sends an INTERESTED message about the given torrent so that we can be unchoked
 func (peer *Peer) send_interested() {
+	if peer.pw == nil {
+		return
+	}
 	peer.pw.write(Message{1, INTERESTED, nil})
+}
+
+// send a request message to peer asking for specified block
+// will take args in the future
+func (peer *Peer) request_block(/*piece_num int, block_num int*/) {
+	if peer.pw == nil {
+		return
+	}
+	block_len := 16 * 1024
+	payload := make([]byte, 12)
+	binary.BigEndian.PutUint32(payload[0:], uint32(0))
+	binary.BigEndian.PutUint32(payload[4:], uint32(0))
+	binary.BigEndian.PutUint32(payload[8:], uint32(block_len))
+	peer.pw.write(Message{13, REQUEST, payload})
+
 }
 
 // TODO: ensure read/write are closed
@@ -204,6 +222,7 @@ func (peer *Peer) get_bitfield () (error) {
 	message_id := int(message_id_buf[0])
 
 	if message_id != BITFIELD {
+		peer.logger.Printf("Unexpected BITFIELD: length: %d, id: %d", length_prefix, message_id)
 		return errors.New("Got unexpected message from peer, expecting BITFIELD")
 	}
 
@@ -217,7 +236,3 @@ func (peer *Peer) get_bitfield () (error) {
 	return nil
 }
 
-// send a request message to peer asking for specified block
-//func (peer *Peer) request_block(piece_num int, block_num int) {
-//	peer.pw
-//}

@@ -38,6 +38,7 @@ func new_peer_writer(peer *Peer) (*Peer_Writer) {
 
 func (pw *Peer_Writer) write(message Message) {
 	// TODO: investigate crash happening here
+	pw.logger.Println("Should be last message before a crash")
 	if pw.message_ch == nil {
 		return
 	}

@@ -38,10 +38,12 @@ func (ch *Connection_Handler) run () {
 //		ch.logger.Printf("There are currently %d connected peers", len(ch.active_connections))
 		for {
 			if ch.torrent.has_all_metadata() {
-				for p := 0; p < len(ch.active_connections); p++ {
-					if ch.active_connections[p].choked {
-						ch.active_connections[p].send_interested()
-					} 
+				for i := 0; i < len(ch.active_connections); i++ {
+					if ch.active_connections[i].choked {
+						ch.active_connections[i].send_interested()
+					} else {
+						ch.active_connections[i].request_block()
+					}
 				}
 			}
 
@@ -61,7 +63,8 @@ func (ch *Connection_Handler) run () {
 			}
 
 			ch.active_connections = append(ch.active_connections, &ch.torrent.peers[ch.next_peer_index])
-			go ch.torrent.peers[ch.next_peer_index].run()
+			go ch.active_connections[len(ch.active_connections) - 1].run()
+//			go ch.torrent.peers[ch.next_peer_index].run()
 			ch.next_peer_index++
 		}
 	}
