@@ -112,7 +112,7 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 				block_buf := make([]byte, length_prefix - 9)
 				total_read := 0
 				for total_read < length_prefix - 9 { // sometimes the block doesn't get fully read in one call here, TODO: investigate this behavior globally
-					temp_buf := make([]byte, len(block_buf))
+					temp_buf := make([]byte, len(block_buf) - total_read)
 					n, err := pr.conn.Read(temp_buf)
 					if err != nil {
 						pr.logger.Println(err)

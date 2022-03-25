@@ -32,6 +32,7 @@ func (torrent *Torrent) new_connection_handler() (*Connection_Handler) {
 }
 
 func (ch *Connection_Handler) run () {
+	defer ch.logger.Println("Connection handler has left the chat...")
 	ch.ticker = time.NewTicker(10 * time.Second)
 	for _ = range(ch.ticker.C) {
 		ch.logger.Println(ch.String())
@@ -42,7 +43,14 @@ func (ch *Connection_Handler) run () {
 					if ch.active_connections[i].choked {
 						ch.active_connections[i].send_interested()
 					} else {
-						ch.active_connections[i].request_block()
+						if !ch.torrent.has_all_data() {
+							ch.logger.Println("Attempting to get a new block")
+//						ch.active_connections[i].request_block()
+							go ch.active_connections[i].get_new_block()
+						} else {
+							ch.logger.Println("Got all data, exiting!")
+							return
+						}
 					}
 				}
 			}
