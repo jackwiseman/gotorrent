@@ -7,6 +7,8 @@ import (
 	"errors"
 	"log"
 	"encoding/binary"
+//	"math/rand"
+
 )
 
 type Peer struct {
@@ -25,7 +27,6 @@ type Peer struct {
 	pr *Peer_Reader
 
 	logger *log.Logger
-
 }
 
 func (peer *Peer) set_extensions(extensions map[string]int) {
@@ -193,7 +194,9 @@ func (peer *Peer) perform_handshake () (error) {
 		if result.Metadata_size != 0 && peer.torrent.metadata_size == 0 { // make sure they attached metadata size, also no reason to overwrite if we already set
 			peer.torrent.metadata_size = result.Metadata_size
 			peer.torrent.metadata_raw = make([]byte, result.Metadata_size)
-			peer.torrent.metadata_pieces = make([]byte, peer.torrent.num_metadata_pieces())
+			peer.torrent.metadata_pieces = make([]byte, (peer.torrent.num_metadata_pieces() + 7) / 8)
+			peer.logger.Println(peer.torrent.metadata_pieces)
+			peer.logger.Println(peer.torrent.num_metadata_pieces())
 			//	fmt.Println("Metadata size:")
 			//	fmt.Println(torrent.metadata_size)
 			//	fmt.Println("Pieces: ")
@@ -233,6 +236,25 @@ func (peer *Peer) get_bitfield () (error) {
 	}
 
 	peer.bitfield = bitfield_buf
+	peer.logger.Println(peer.bitfield)
+	//for i := 0; i < 8; i++ {
+	//	peer.logger.Printf("%d - %t\n", i, peer.has_piece(i))
+	//}
 	return nil
 }
 
+// triggered after a successful connection & metadata is received
+/*func (peer *Peer) queue_manager() {
+	
+}*/
+
+// return a random piece + offset pair corresponding to a non downloaded block
+/*func (peer *Peer) get_new_block() (int, int) {
+	rand.Seed(time.Now().UnixNano())
+	for {
+	}
+}*/
+
+func (peer *Peer) has_piece (piece_num int) (bool) {
+	return (peer.bitfield[(piece_num / int(8))] >> ((7 - piece_num) % 8)) & 1 == 1
+}
