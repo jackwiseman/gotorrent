@@ -54,14 +54,13 @@ func (torrent *Torrent) get_rand_metadata_piece() (int) {
 			return test_piece
 		}
 	}
-
 }
 
 func (torrent *Torrent) has_metadata_piece(piece_num int) (bool) {
 	if len(torrent.metadata_pieces) == 0 {
 		return false
 	}
-	return (torrent.metadata_pieces[piece_num / int(3)] >> (3 - piece_num % 4)) & 1 == 1
+	return (torrent.metadata_pieces[piece_num / int(7)] >> (7 - piece_num % 8)) & 1 == 1
 }
 
 func (torrent *Torrent) set_metadata_piece(piece_num int, metadata_piece []byte) (error) {
@@ -76,7 +75,7 @@ func (torrent *Torrent) set_metadata_piece(piece_num int, metadata_piece []byte)
 	torrent.metadata_raw = append(torrent.metadata_raw, temp...)
 
 	// set as "have"
-	torrent.metadata_pieces[piece_num / int(3)] = torrent.metadata_pieces[piece_num / int(3)] | (1 << (3 - piece_num % 4))
+	torrent.metadata_pieces[piece_num / int(7)] = torrent.metadata_pieces[piece_num / int(7)] | (1 << (7 - piece_num % 8))
 
 	return nil
 }

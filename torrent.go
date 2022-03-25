@@ -190,12 +190,12 @@ func (torrent *Torrent) parse_metadata_file() (error) {
 
 	// create empty pieces slice
 	torrent.pieces = make([]Piece, int(math.Ceil(float64(torrent.metadata.Length) / float64(torrent.metadata.Piece_len))))
-	for i := 0; i < len(torrent.pieces)/* - 1*/; i++ {
+	for i := 0; i < len(torrent.pieces) - 1; i++ {
 		torrent.pieces[i].blocks = make([]Block, torrent.metadata.Piece_len / (BLOCK_LEN))
 	}
 	torrent.pieces[len(torrent.pieces) - 1].blocks = make([]Block, int(math.Ceil(float64(torrent.metadata.Length - (torrent.metadata.Piece_len * (len(torrent.pieces) - 1))) / float64(BLOCK_LEN))))
 	fmt.Println(torrent.pieces)
-	torrent.obtained_blocks = make([]byte, int(math.Ceil(float64(torrent.get_num_blocks()) / float64(4))))
+	torrent.obtained_blocks = make([]byte, int(math.Ceil(float64(torrent.get_num_blocks()) / float64(8))))
 	
 	return nil
 }
@@ -222,8 +222,8 @@ func (torrent *Torrent) start_download() {
 
 func (torrent *Torrent) set_block(piece_index int, offset int, data []byte) {
 	torrent.pieces[piece_index].blocks[offset/BLOCK_LEN].data = data
-	block_index := (piece_index * torrent.get_num_blocks_in_piece() + (offset / BLOCK_LEN)) / int(3)
-	torrent.obtained_blocks[block_index] = torrent.obtained_blocks[block_index] | (1 << (3 - block_index % 4))
+	block_index := (piece_index * torrent.get_num_blocks_in_piece() + (offset / BLOCK_LEN)) / int(7)
+	torrent.obtained_blocks[block_index] = torrent.obtained_blocks[block_index] | (1 << (7 - block_index % 8))
 	fmt.Printf("\nPiece (%d, %d) recieved\n", piece_index, offset/BLOCK_LEN)
 	fmt.Println(torrent.obtained_blocks)
 	fmt.Println(torrent.has_block(piece_index, offset))
@@ -234,7 +234,7 @@ func (torrent *Torrent) has_block(piece_index int, offset int) (bool) {
 		return false
 	}
 	block_index := (piece_index * torrent.get_num_blocks_in_piece() + (offset / BLOCK_LEN)) / int(3)
-	return torrent.obtained_blocks[block_index] >> ((3 - block_index) % 4) & 1 == 1
+	return torrent.obtained_blocks[block_index] >> ((7 - block_index) % 8) & 1 == 1
 }
 
 func (torrent *Torrent) get_num_blocks() (int) {
