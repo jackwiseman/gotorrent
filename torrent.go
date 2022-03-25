@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-//	"log"
 	"os"
 	"math"
 	"strings"
@@ -11,9 +10,7 @@ import (
 	"sync"	
 	"io/ioutil"
 	"bytes"
-
 	bencode "github.com/jackpal/bencode-go"
-
 )
 
 type Torrent struct {
@@ -33,6 +30,7 @@ type Torrent struct {
 	metadata_mx sync.Mutex // to ensure that that we only trigger "building" the metadata once
 
 	pieces []Piece
+	obtained_blocks []byte // similar to 'metadata pieces', allows for quick bitwise checking which pieces we have, if the ith bit is set to 1 we have that block
 
 	log_file *os.File
 
@@ -193,10 +191,11 @@ func (torrent *Torrent) parse_metadata_file() (error) {
 	// create empty pieces slice
 	torrent.pieces = make([]Piece, int(math.Ceil(float64(torrent.metadata.Length) / float64(torrent.metadata.Piece_len))))
 	for i := 0; i < len(torrent.pieces)/* - 1*/; i++ {
-		torrent.pieces[i].blocks = make([]Block, torrent.metadata.Piece_len / (1024 * 16))
+		torrent.pieces[i].blocks = make([]Block, torrent.metadata.Piece_len / (BLOCK_LEN))
 	}
-	torrent.pieces[len(torrent.pieces) - 1].blocks = make([]Block, int(math.Ceil(float64(torrent.metadata.Length - (torrent.metadata.Piece_len * (len(torrent.pieces) - 1))) / float64(1024 * 16))))
+	torrent.pieces[len(torrent.pieces) - 1].blocks = make([]Block, int(math.Ceil(float64(torrent.metadata.Length - (torrent.metadata.Piece_len * (len(torrent.pieces) - 1))) / float64(BLOCK_LEN))))
 	fmt.Println(torrent.pieces)
+	torrent.obtained_blocks = make([]byte, int(math.Ceil(float64(torrent.get_num_blocks()) / float64(4))))
 	
 	return nil
 }
@@ -223,5 +222,25 @@ func (torrent *Torrent) start_download() {
 
 func (torrent *Torrent) set_block(piece_index int, offset int, data []byte) {
 	torrent.pieces[piece_index].blocks[offset/BLOCK_LEN].data = data
-	fmt.Printf("\nPiece (%d, %d) recieved", piece_index, offset/BLOCK_LEN)
+	block_index := (piece_index * torrent.get_num_blocks_in_piece() + (offset / BLOCK_LEN)) / int(3)
+	torrent.obtained_blocks[block_index] = torrent.obtained_blocks[block_index] | (1 << (3 - block_index % 4))
+	fmt.Printf("\nPiece (%d, %d) recieved\n", piece_index, offset/BLOCK_LEN)
+	fmt.Println(torrent.obtained_blocks)
+	fmt.Println(torrent.has_block(piece_index, offset))
+}
+
+func (torrent *Torrent) has_block(piece_index int, offset int) (bool) {
+	if torrent.obtained_blocks == nil {
+		return false
+	}
+	block_index := (piece_index * torrent.get_num_blocks_in_piece() + (offset / BLOCK_LEN)) / int(3)
+	return torrent.obtained_blocks[block_index] >> ((3 - block_index) % 4) & 1 == 1
+}
+
+func (torrent *Torrent) get_num_blocks() (int) {
+	return int(math.Ceil(float64(torrent.metadata.Length) / float64(BLOCK_LEN)))
+}
+
+func (torrent *Torrent) get_num_blocks_in_piece() (int) {
+	return torrent.metadata.Piece_len / BLOCK_LEN
 }
