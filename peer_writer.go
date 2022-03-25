@@ -72,11 +72,11 @@ func (pw *Peer_Writer) send_metadata_request(piece_num int) {
 func (pw *Peer_Writer) metadata_request_scheduler() {
 	pw.metadata_request_ticker = time.NewTicker(15 * time.Second)
 	for _ = range(pw.metadata_request_ticker.C) {
-		pw.logger.Println("Requesting metadata")
 		if pw.peer.torrent.has_all_metadata() {
 			pw.metadata_request_ticker.Stop()
 			return
 		}
+		pw.logger.Println("Requesting metadata")
 		pw.send_metadata_request(pw.peer.torrent.get_rand_metadata_piece())
 	}
 }

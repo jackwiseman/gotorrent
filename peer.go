@@ -7,7 +7,7 @@ import (
 	"errors"
 	"log"
 	"encoding/binary"
-//	"math/rand"
+	"math/rand"
 
 )
 
@@ -112,16 +112,14 @@ func (peer *Peer) send_interested() {
 }
 
 // send a request message to peer asking for specified block
-// will take args in the future
-func (peer *Peer) request_block(/*piece_num int, block_num int*/) {
+func (peer *Peer) request_block(piece_num int, offset int) {
 	if peer.pw == nil {
 		return
 	}
-	block_len := 16 * 1024
 	payload := make([]byte, 12)
-	binary.BigEndian.PutUint32(payload[0:], uint32(0))
-	binary.BigEndian.PutUint32(payload[4:], uint32(0))
-	binary.BigEndian.PutUint32(payload[8:], uint32(block_len))
+	binary.BigEndian.PutUint32(payload[0:], uint32(piece_num))
+	binary.BigEndian.PutUint32(payload[4:], uint32(offset * BLOCK_LEN))
+	binary.BigEndian.PutUint32(payload[8:], uint32(BLOCK_LEN))
 	peer.pw.write(Message{13, REQUEST, payload})
 
 }
@@ -237,9 +235,6 @@ func (peer *Peer) get_bitfield () (error) {
 
 	peer.bitfield = bitfield_buf
 	peer.logger.Println(peer.bitfield)
-	//for i := 0; i < 8; i++ {
-	//	peer.logger.Printf("%d - %t\n", i, peer.has_piece(i))
-	//}
 	return nil
 }
 
@@ -249,11 +244,24 @@ func (peer *Peer) get_bitfield () (error) {
 }*/
 
 // return a random piece + offset pair corresponding to a non downloaded block
-/*func (peer *Peer) get_new_block() (int, int) {
+// TODO: incorporate return values from this to add to queue
+func (peer *Peer) get_new_block() {
 	rand.Seed(time.Now().UnixNano())
-	for {
+//	this outer loop is temporary, eventually it should be a queue
+	for i:=0; i < 5; i++ {
+		if !peer.torrent.has_all_data() {
+			for {
+				test_piece := rand.Intn(len(peer.torrent.pieces))
+				test_offset := rand.Intn(len(peer.torrent.pieces[test_piece].blocks))
+
+				if peer.has_piece(test_piece) && !peer.torrent.has_block(test_piece, test_offset * BLOCK_LEN) {
+					peer.request_block(test_piece, test_offset)
+					break
+				}
+			}
+		}
 	}
-}*/
+}
 
 func (peer *Peer) has_piece (piece_num int) (bool) {
 	return (peer.bitfield[(piece_num / int(8))] >> ((7 - piece_num) % 8)) & 1 == 1
