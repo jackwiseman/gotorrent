@@ -185,10 +185,13 @@ func (torrent *Torrent) parse_metadata_file() (error) {
 	if err != nil {
 		return err
 	}
+	fmt.Println(result)
 	torrent.metadata = result
 	torrent.display_name = torrent.metadata.Name
 
 	// create empty pieces slice
+	fmt.Println(torrent.metadata.Length)
+	fmt.Println(torrent.metadata.Piece_len)
 	torrent.pieces = make([]Piece, int(math.Ceil(float64(torrent.metadata.Length) / float64(torrent.metadata.Piece_len))))
 	for i := 0; i < len(torrent.pieces) - 1; i++ {
 		torrent.pieces[i].blocks = make([]Block, torrent.metadata.Piece_len / (BLOCK_LEN))
@@ -223,8 +226,11 @@ func (torrent *Torrent) start_download() {
 func (torrent *Torrent) set_block(piece_index int, offset int, data []byte) {
 	torrent.pieces[piece_index].blocks[offset/BLOCK_LEN].data = data
 	block_index := (piece_index * torrent.get_num_blocks_in_piece() + (offset / BLOCK_LEN))
-	torrent.obtained_blocks[block_index/7] = torrent.obtained_blocks[block_index/7] | (1 << (7 - (block_index % 8)))
+	// changed to / 8 rather than 7
+	torrent.obtained_blocks[block_index/8] = torrent.obtained_blocks[block_index/8] | (1 << (7 - (block_index % 8)))
 	fmt.Printf("\nPiece (%d, %d) recieved\n", piece_index, offset/BLOCK_LEN)
+	fmt.Println(( 1 << (7 - (block_index % 8))))
+	fmt.Printf("\nBlock_index -> %d", block_index)
 	fmt.Println(torrent.obtained_blocks)
 	fmt.Println(torrent.has_block(piece_index, offset))
 }
@@ -241,7 +247,7 @@ func (torrent *Torrent) has_block(piece_index int, offset int) (bool) {
 	// fmt.Println(torrent.obtained_blocks[block_index / 7])
 	// fmt.Println(7 - (block_index % 8))
 	// fmt.Println("-----")
-	return torrent.obtained_blocks[block_index / 7] >> (7 - (block_index % 8)) & 1 == 1
+	return torrent.obtained_blocks[block_index / 8] >> (7 - (block_index % 8)) & 1 == 1
 }
 
 func (torrent *Torrent) get_num_blocks() (int) {
@@ -262,6 +268,12 @@ func (torrent *Torrent) has_all_data() (bool) {
 	if torrent.get_num_blocks() % 8 == 0 {
 		return true
 	}
+	fmt.Println("---")
+	fmt.Println("Shift amt:")
+	fmt.Println(7 - torrent.get_num_blocks() % 8)
+	fmt.Println(int(torrent.obtained_blocks[len(torrent.obtained_blocks) - 1]) >> (7 - torrent.get_num_blocks() % 8))
+	fmt.Println((255 >> (7 - torrent.get_num_blocks() % 8)))
+	fmt.Println("---")
 
-	return int(torrent.obtained_blocks[len(torrent.pieces) - 1]) == (255 >> (8 - torrent.get_num_blocks() % 8))
+	return int(torrent.obtained_blocks[len(torrent.obtained_blocks) - 1]) >> (7 - torrent.get_num_blocks() % 8) == (255 >> (7 - torrent.get_num_blocks() % 8))
 }

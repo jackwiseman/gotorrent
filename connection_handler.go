@@ -63,6 +63,11 @@ func (ch *Connection_Handler) run () {
 			if ch.next_peer_index >= len(ch.torrent.peers) - 1 {
 				if len(ch.active_connections) == 0 {
 					ch.logger.Println("Connected to all peers")
+/*					// the following is a quick fix, for some reason, peers seem to either just drop this client, or not receive keepalive messages
+					if !ch.torrent.has_all_data() {
+						ch.next_peer_index = 0
+						continue
+					}*/
 					return
 				}
 				ch.logger.Printf("No more peers left to add")

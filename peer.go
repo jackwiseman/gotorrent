@@ -248,17 +248,21 @@ func (peer *Peer) get_bitfield () (error) {
 func (peer *Peer) get_new_block() {
 	rand.Seed(time.Now().UnixNano())
 //	this outer loop is temporary, eventually it should be a queue
-	for i:=0; i < 5; i++ {
+	for i:=0; i < 30; i++ {
 		if !peer.torrent.has_all_data() {
 			for {
 				test_piece := rand.Intn(len(peer.torrent.pieces))
 				test_offset := rand.Intn(len(peer.torrent.pieces[test_piece].blocks))
+
+				peer.logger.Printf("\nTesting %d, %d (%t, %t)\n", test_piece, test_offset, peer.has_piece(test_piece), peer.torrent.has_block(test_piece, test_offset * BLOCK_LEN)) 
 
 				if peer.has_piece(test_piece) && !peer.torrent.has_block(test_piece, test_offset * BLOCK_LEN) {
 					peer.request_block(test_piece, test_offset)
 					break
 				}
 			}
+		} else {
+			peer.logger.Println("Have all data")
 		}
 	}
 }
