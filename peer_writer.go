@@ -3,7 +3,7 @@ package main
 import (
 	"net"
 	"time"
-	"encoding/binary"
+//	"encoding/binary"
 	"sync"
 	"bufio"
 	"log"
@@ -38,7 +38,6 @@ func new_peer_writer(peer *Peer) (*Peer_Writer) {
 
 func (pw *Peer_Writer) write(message Message) {
 	// TODO: investigate crash happening here
-	pw.logger.Println("Should be last message before a crash")
 	if pw.message_ch == nil {
 		return
 	}
@@ -84,10 +83,7 @@ func (pw *Peer_Writer) metadata_request_scheduler() {
 func (pw *Peer_Writer) keep_alive_scheduler() {
 	pw.keep_alive_ticker = time.NewTicker(1 * time.Minute)
 	for _ = range(pw.keep_alive_ticker.C) {
-		keep_alive := make([]byte, 4)
-		binary.BigEndian.PutUint32(keep_alive, 0)
-		pw.logger.Println(keep_alive)
-		pw.conn.Write(keep_alive)
+		pw.conn.Write([]byte{0, 0, 0, 0})
 	}
 	pw.keep_alive_ticker.Stop() 
 }
