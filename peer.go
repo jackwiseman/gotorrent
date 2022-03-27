@@ -116,10 +116,18 @@ func (peer *Peer) request_block(piece_num int, offset int) {
 	if peer.pw == nil {
 		return
 	}
+
 	payload := make([]byte, 12)
 	binary.BigEndian.PutUint32(payload[0:], uint32(piece_num))
 	binary.BigEndian.PutUint32(payload[4:], uint32(offset * BLOCK_LEN))
-	binary.BigEndian.PutUint32(payload[8:], uint32(BLOCK_LEN))
+
+	// if this is the last blocks, we need to request the correct len
+	if (piece_num * peer.torrent.get_num_blocks_in_piece()) + offset + 1 == peer.torrent.get_num_blocks() {
+		binary.BigEndian.PutUint32(payload[8:], uint32(peer.torrent.metadata.Length % BLOCK_LEN))
+	} else {
+		binary.BigEndian.PutUint32(payload[8:], uint32(BLOCK_LEN))
+	}
+	
 	peer.pw.write(Message{13, REQUEST, payload})
 
 }
@@ -257,6 +265,7 @@ func (peer *Peer) get_new_block() {
 				peer.logger.Printf("\nTesting %d, %d (%t, %t)\n", test_piece, test_offset, peer.has_piece(test_piece), peer.torrent.has_block(test_piece, test_offset * BLOCK_LEN)) 
 
 				if peer.has_piece(test_piece) && !peer.torrent.has_block(test_piece, test_offset * BLOCK_LEN) {
+					peer.logger.Printf("\nRequesting %d, %d\n", test_piece, test_offset)
 					peer.request_block(test_piece, test_offset)
 					break
 				}
