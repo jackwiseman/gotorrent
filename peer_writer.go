@@ -102,9 +102,7 @@ func (pw *Peer_Writer) run(wg *sync.WaitGroup) {
 
 		pw.logger.Println(msg)
 
-		if int(msg[4]) == STOP { // bad typecast comparison
-			// Peer writer exits
-			pw.logger.Println("Peer_Writer received STOP, exiting...")
+		if int(msg[4]) == STOP {
 			return
 		}
 

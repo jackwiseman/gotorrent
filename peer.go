@@ -45,26 +45,31 @@ func new_peer(ip string, port string, torrent *Torrent) (*Peer) {
 	return &peer
 }
 
-func (peer *Peer) run() {
-	defer peer.disconnect() // ideally this mutex shouldn't just be passed around as much
+func (peer *Peer) run(done_ch chan *Peer) {
+	defer peer.disconnect(done_ch) // ideally this mutex shouldn't just be passed around as much
+
 
 	peer.logger.Printf("Connecting")
 
 	err := peer.connect()
 	if err != nil {
 		peer.logger.Println("Connection error: " + err.Error())
+
+		done_ch <- peer
 		return
 	}
 	err = peer.perform_handshake()
 
 	if err != nil {
 		peer.logger.Println("Handshake error: " + err.Error())
+		done_ch <- peer
 		return
 	}
 
 	err = peer.get_bitfield()
 	if err != nil {
 		peer.logger.Println("Bitfield error: " + err.Error())
+		done_ch <- peer
 		return
 	}
 
@@ -75,6 +80,7 @@ func (peer *Peer) run() {
 	go peer.pw.run(&wg)
 
 	wg.Wait()
+
 }
 
 func (peer *Peer) supports_metadata_requests() (bool) {
@@ -129,16 +135,17 @@ func (peer *Peer) request_block(piece_num int, offset int) {
 	}
 	
 	peer.pw.write(Message{13, REQUEST, payload})
-
 }
 
 // TODO: ensure read/write are closed
-func (peer *Peer) disconnect() {
+func (peer *Peer) disconnect(done_ch chan *Peer) {
 	if peer.conn != nil { // need to look into this, also keeping it open
 		peer.conn.Close()
 	}
-	peer.torrent.conn_handler.remove_connection(peer)
+//	peer.torrent.conn_handler.remove_connection(peer)
 	peer.logger.Println("Disconnected")
+
+	done_ch <- peer
 }
 
 func (peer *Peer) perform_handshake () (error) {
