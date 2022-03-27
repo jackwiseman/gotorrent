@@ -17,8 +17,16 @@ type Metadata struct {
 	Pieces string "pieces"
 	// contains one of the following, where 'length' means there is one file, and 'files' means there are multiple, only single file downloads will be allowed for the moment
 	Length int "length"
-	Files int "files"
+	Files []Metadata_file "files"
 }
+
+// for use in bencoding
+type Metadata_file struct {
+	Length int "length"
+	Path map[string]string //"path"
+}
+
+
 
 func (md *Metadata) String() (string) {
 	s := "Name: " + md.Name +"\nPiece length: " + strconv.Itoa(md.Piece_len) + "\nLength: " + strconv.Itoa(md.Length)
