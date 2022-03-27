@@ -8,6 +8,7 @@ func main() {
 	// flush current debug log
 	os.Remove("debug.log")
 
+
 	default_connections := 30
 
 	// Links defined in magnet_links.go for now

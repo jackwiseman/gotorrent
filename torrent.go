@@ -220,6 +220,7 @@ func (torrent *Torrent) start_download() {
 
 	/*	var wg sync.WaitGroup
 
+
 	for i := 0; i < len(torrent.peers); i++ {
 		wg.Add(1)
 		go torrent.peers[i].run(torrent, &wg)

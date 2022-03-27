@@ -48,11 +48,13 @@ func new_peer(ip string, port string, torrent *Torrent) (*Peer) {
 func (peer *Peer) run(done_ch chan *Peer) {
 	defer peer.disconnect(done_ch) // ideally this mutex shouldn't just be passed around as much
 
+
 	peer.logger.Printf("Connecting")
 
 	err := peer.connect()
 	if err != nil {
 		peer.logger.Println("Connection error: " + err.Error())
+
 		done_ch <- peer
 		return
 	}

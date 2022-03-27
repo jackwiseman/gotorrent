@@ -20,6 +20,7 @@ type Connection_Handler struct {
 	// channel for peers to notify connection handler that they've disconnected, allows us to not just run in a ticker
 	done_chan chan *Peer
 
+
 	logger *log.Logger
 
 }
@@ -28,7 +29,9 @@ func (torrent *Torrent) new_connection_handler() (*Connection_Handler) {
 	var ch Connection_Handler
 
 	ch.torrent = torrent
+
 	ch.done_chan = make(chan *Peer)
+
 	ch.logger = log.New(torrent.log_file, "[Connection Handler] ", log.Ltime | log.Lshortfile)
 	
 	return &ch
