@@ -268,12 +268,15 @@ func (torrent *Torrent) has_all_data() (bool) {
 	if torrent.get_num_blocks() % 8 == 0 {
 		return true
 	}
-	fmt.Println("---")
-	fmt.Println("Shift amt:")
-	fmt.Println(7 - torrent.get_num_blocks() % 8)
-	fmt.Println(int(torrent.obtained_blocks[len(torrent.obtained_blocks) - 1]) >> (7 - torrent.get_num_blocks() % 8))
-	fmt.Println((255 >> (7 - torrent.get_num_blocks() % 8)))
-	fmt.Println("---")
 
-	return int(torrent.obtained_blocks[len(torrent.obtained_blocks) - 1]) >> (7 - torrent.get_num_blocks() % 8) == (255 >> (7 - torrent.get_num_blocks() % 8))
+	return int(torrent.obtained_blocks[len(torrent.obtained_blocks) - 1]) >> (8 - torrent.get_num_blocks() % 8) == (255 >> (8 - torrent.get_num_blocks() % 8))
+}
+
+func (torrent *Torrent) build_file() {
+	file, _ := os.Create(torrent.metadata.Name)
+	for i := 0; i < len(torrent.pieces); i++ {
+		for j := 0; j < len(torrent.pieces[i].blocks); j++ {
+			_, _ = file.Write(torrent.pieces[i].blocks[j].data)
+		}
+	}
 }

@@ -49,6 +49,7 @@ func (ch *Connection_Handler) run () {
 							go ch.active_connections[i].get_new_block()
 						} else {
 							ch.logger.Println("Got all data, exiting!")
+							ch.torrent.build_file()
 							return
 						}
 					}
