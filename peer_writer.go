@@ -74,9 +74,12 @@ func (pw *Peer_Writer) metadata_request_scheduler() {
 		if pw.peer.torrent.has_all_metadata() {
 			pw.metadata_request_ticker.Stop()
 			return
+		} else {
+			if pw.peer.supports_metadata_requests() {
+				pw.logger.Println("Requesting metadata")
+				pw.send_metadata_request(pw.peer.torrent.get_rand_metadata_piece())
+			}
 		}
-		pw.logger.Println("Requesting metadata")
-		pw.send_metadata_request(pw.peer.torrent.get_rand_metadata_piece())
 	}
 }
 
@@ -93,7 +96,7 @@ func (pw *Peer_Writer) run(wg *sync.WaitGroup) {
 
 	go pw.keep_alive_scheduler()
 
-	if !pw.peer.torrent.has_all_metadata() && pw.peer.supports_metadata_requests() {
+	if !pw.peer.torrent.has_all_metadata() /*&& pw.peer.supports_metadata_requests()*/ {
 		go pw.metadata_request_scheduler()
 	}
 

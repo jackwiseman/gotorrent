@@ -268,7 +268,7 @@ func (torrent *Torrent) has_all_data() (bool) {
 }
 
 func (torrent *Torrent) build_file() {
-	file, _ := os.Create(torrent.metadata.Name)
+	file, _ := os.Create("downloads/" + torrent.metadata.Name)
 	for i := 0; i < len(torrent.pieces); i++ {
 		for j := 0; j < len(torrent.pieces[i].blocks); j++ {
 			_, _ = file.Write(torrent.pieces[i].blocks[j].data)

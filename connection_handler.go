@@ -89,8 +89,7 @@ func (ch *Connection_Handler) run () {
 
 // remove peer from the connection slice
 func (ch *Connection_Handler) remove_connection(peer *Peer) {
-	ch.logger.Println("Goodbye")
-	ch.edit_connected_peers.Lock()
+//	ch.edit_connected_peers.Lock()
 	if len(ch.active_connections) == 1 {
 		ch.active_connections = []*Peer{}
 	} else {
@@ -101,7 +100,9 @@ func (ch *Connection_Handler) remove_connection(peer *Peer) {
 			}
 		}
 	}
-	ch.edit_connected_peers.Unlock()
+	
+	ch.logger.Println("Goodbye " + peer.ip)
+//	ch.edit_connected_peers.Unlock()
 }
 
 // Prints all alive connections

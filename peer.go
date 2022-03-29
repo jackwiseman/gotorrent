@@ -26,6 +26,8 @@ type Peer struct {
 	pw *Peer_Writer
 	pr *Peer_Reader
 
+	pq *Piece_Queue
+
 	logger *log.Logger
 }
 
@@ -253,34 +255,40 @@ func (peer *Peer) get_bitfield () (error) {
 	return nil
 }
 
-// triggered after a successful connection & metadata is received
-/*func (peer *Peer) queue_manager() {
-	
-}*/
+// triggered after metadata is received
+func (peer *Peer) queue_manager() {
+	// build queue of size x
+	for i := 0; i < 15; i++ {
+		piece, offset := peer.get_new_block()
+		peer.pq.push(piece, offset)
+	}
+
+}
 
 // return a random piece + offset pair corresponding to a non downloaded block
+// or -1, -1 in the case of all blocks already downloaded
 // TODO: incorporate return values from this to add to queue
-func (peer *Peer) get_new_block() {
+func (peer *Peer) get_new_block() (int, int) {
 	rand.Seed(time.Now().UnixNano())
 //	this outer loop is temporary, eventually it should be a queue
-	for i:=0; i < 30; i++ {
-		if !peer.torrent.has_all_data() {
-			for {
-				test_piece := rand.Intn(len(peer.torrent.pieces))
-				test_offset := rand.Intn(len(peer.torrent.pieces[test_piece].blocks))
+//	for i:=0; i < 30; i++ {
+	if peer.torrent.has_all_data() {
+		return -1, -1
+	}
 
-				peer.logger.Printf("\nTesting %d, %d (%t, %t)\n", test_piece, test_offset, peer.has_piece(test_piece), peer.torrent.has_block(test_piece, test_offset * BLOCK_LEN)) 
+	for {
+		test_piece := rand.Intn(len(peer.torrent.pieces))
+		test_offset := rand.Intn(len(peer.torrent.pieces[test_piece].blocks))
 
-				if peer.has_piece(test_piece) && !peer.torrent.has_block(test_piece, test_offset * BLOCK_LEN) {
-					peer.logger.Printf("\nRequesting %d, %d\n", test_piece, test_offset)
-					peer.request_block(test_piece, test_offset)
-					break
-				}
-			}
-		} else {
-			peer.logger.Println("Have all data")
+	//	peer.logger.Printf("\nTesting %d, %d (%t, %t)\n", test_piece, test_offset, peer.has_piece(test_piece), peer.torrent.has_block(test_piece, test_offset * BLOCK_LEN)) 
+
+		if peer.has_piece(test_piece) && !peer.torrent.has_block(test_piece, test_offset * BLOCK_LEN) {
+			//peer.logger.Printf("\nRequesting %d, %d\n", test_piece, test_offset)
+			return test_piece, test_offset
 		}
 	}
+	
+	return -1, -1
 }
 
 func (peer *Peer) has_piece (piece_num int) (bool) {

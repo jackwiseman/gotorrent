@@ -3,3 +3,6 @@
 
 main
 magnet_links.go
+
+downloads/
+downloads/**
