@@ -133,6 +133,10 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 				//pr.logger.Println(len(block_buf))
 
 				pr.peer.torrent.set_block(index, begin, block_buf)
+
+
+				// request a new piece
+				go pr.peer.request_new_block()
 			case CANCEL:
 				pr.logger.Println("Received CANCEL")
 			case PORT:
