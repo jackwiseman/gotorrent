@@ -35,6 +35,7 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 
 	for {
 		// disconnect if we don't receive a KEEP ALIVE (or any message) for 2 minutes
+		pr.logger.Println("Waiting...")
 		pr.conn.SetReadDeadline(time.Now().Add(time.Minute * time.Duration(2)))
 
 		length_prefix_buf := make([]byte, 4)
@@ -134,8 +135,6 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 
 				pr.peer.torrent.set_block(index, begin, block_buf)
 
-
-				// request a new piece
 				go pr.peer.request_new_block()
 			case CANCEL:
 				pr.logger.Println("Received CANCEL")

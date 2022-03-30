@@ -187,8 +187,8 @@ func (torrent *Torrent) parse_metadata_file() (error) {
 	}
 //	fmt.Println(result)
 
-	fmt.Println("Parsing metadata")
-	fmt.Println(result.Files)
+//	fmt.Println("Parsing metadata")
+//	fmt.Println(result.Files)
 	torrent.metadata = result
 	if len(result.Files) == 1 {
 		torrent.metadata.Length = result.Files[0].Length
@@ -202,7 +202,7 @@ func (torrent *Torrent) parse_metadata_file() (error) {
 		torrent.pieces[i].blocks = make([]Block, torrent.metadata.Piece_len / (BLOCK_LEN))
 	}
 	torrent.pieces[len(torrent.pieces) - 1].blocks = make([]Block, int(math.Ceil(float64(torrent.metadata.Length - (torrent.metadata.Piece_len * (len(torrent.pieces) - 1))) / float64(BLOCK_LEN))))
-	fmt.Println(torrent.pieces)
+//	fmt.Println(torrent.pieces)
 	torrent.obtained_blocks = make([]byte, int(math.Ceil(float64(torrent.get_num_blocks()) / float64(8))))
 	
 	return nil
@@ -251,6 +251,12 @@ func (torrent *Torrent) get_num_blocks() (int) {
 
 func (torrent *Torrent) get_num_blocks_in_piece() (int) {
 	return torrent.metadata.Piece_len / BLOCK_LEN
+}
+
+func (torrent *Torrent) check_download_status() {
+	if torrent.has_all_data() {
+		torrent.build_file()
+	}
 }
 
 func (torrent *Torrent) has_all_data() (bool) {

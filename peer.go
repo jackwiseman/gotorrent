@@ -29,8 +29,6 @@ type Peer struct {
 	requests []byte
 	// responses []byte
 
-	pq *Piece_Queue
-
 	logger *log.Logger
 }
 
@@ -124,7 +122,7 @@ func (peer *Peer) send_interested() {
 
 // send a request message to peer asking for specified block
 func (peer *Peer) request_block(piece_num int, offset int) {
-	peer.logger.Println("Requsting block")
+	peer.logger.Printf("\nRequsting block (%d, %d)", piece_num, offset)
 	if peer.pw == nil {
 		return
 	}
@@ -258,6 +256,13 @@ func (peer *Peer) get_bitfield () (error) {
 
 // Request queue_size blocks from peer, so that time is not lost between each received block and each new requested one
 func (peer *Peer) queue_blocks() {
+	peer.send_interested()
+
+	for {
+		if !peer.choked {
+			break
+		}
+	}
 	peer.requests = make([]byte, ((peer.torrent.get_num_blocks()) + 8) / 8)
 	queue_size := 15
 	
@@ -269,6 +274,15 @@ func (peer *Peer) queue_blocks() {
 	}
 }
 
+func (peer *Peer) request_new_block() {
+	go peer.torrent.check_download_status()
+	piece, offset := peer.get_new_block() 
+	if piece == -1 {
+		return
+	}
+
+	peer.request_block(piece, offset)
+}
 // Return true if we have requested this block from this peer
 func (peer *Peer) made_request(piece int, offset int) (bool) {
 	index := (piece * peer.torrent.get_num_blocks_in_piece()) + offset
@@ -293,15 +307,6 @@ func (peer *Peer) get_new_block() (int, int) {
 	}
 	
 	return -1, -1
-}
-
-func (peer *Peer) request_new_block() {
-	piece, offset := peer.get_new_block()
-	if piece == -1 && offset == -1 {
-		return	
-	}
-	peer.pq.push(piece, offset)
-	peer.request_block(peer.pq.pop())
 }
 
 func (peer *Peer) has_piece (piece_num int) (bool) {
