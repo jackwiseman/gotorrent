@@ -268,6 +268,9 @@ func (peer *Peer) queue_blocks() {
 	
 	for i := 0; i < queue_size; i++ {
 		piece, offset := peer.get_new_block()
+		if piece == -1 {
+			continue
+		}
 		index := (piece * peer.torrent.get_num_blocks_in_piece()) + offset
 		peer.requests[index/8] = peer.requests[index/8] | (1 << (7 - (index % 8)))
 		peer.request_block(piece, offset)

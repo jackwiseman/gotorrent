@@ -81,6 +81,12 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 				continue
 			case HAVE:
 				pr.logger.Println("Received HAVE")
+				piece_index_buf := make([]byte, 4)
+				_, err = pr.conn.Read(piece_index_buf)
+				if err != nil {
+					pr.logger.Println(err)
+					return
+				}
 			case BITFIELD:
 				pr.logger.Println("Received BITFIELD")
 				bitfield_buf := make([]byte, length_prefix - 1)
@@ -92,6 +98,16 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 				pr.peer.bitfield = bitfield_buf
 			case REQUEST:
 				pr.logger.Println("Received REQUEST")
+
+				// index, begin, length
+				payload_buf := make([]byte, 12)
+
+				_, err = pr.conn.Read(payload_buf)
+				if err != nil {
+					pr.logger.Println(err)
+					return
+				}
+				
 			case PIECE:
 				pr.logger.Println("Received PIECE")
 
@@ -138,8 +154,25 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 				go pr.peer.request_new_block()
 			case CANCEL:
 				pr.logger.Println("Received CANCEL")
+
+				// index, begin, length
+				payload_buf := make([]byte, 12)
+
+				_, err = pr.conn.Read(payload_buf)
+				if err != nil {
+					pr.logger.Println(err)
+					return
+				}
 			case PORT:
 				pr.logger.Println("Received PORT")
+				listen_port_buf := make([]byte, 2)
+				_, err = pr.conn.Read(listen_port_buf)
+				if err != nil {
+					pr.logger.Println(err)
+					return
+				}
+
+
 			case EXTENDED:
 				pr.logger.Println("Received EXTENDED")
 				extended_id_buf := make([]byte, 1)
