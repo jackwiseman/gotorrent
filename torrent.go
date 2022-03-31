@@ -48,8 +48,6 @@ func new_torrent(magnet_link string, max_peers int) (*Torrent) {
 	torrent.parse_magnet_link()
 	torrent.conn_handler = torrent.new_connection_handler()
 
-	//	var m sync.Mutex
-	//	torrent.metadata_mx = &m
 	return &torrent
 }
 
@@ -109,7 +107,7 @@ func (torrent Torrent) print_info() {
 			fmt.Println(" -- " + torrent.peers[i].ip)
 		}
 	}
-	if torrent.has_all_metadata() {
+	if torrent.metadata.Length != 0 {
 		fmt.Println("Metadata info (" + strconv.Itoa(torrent.metadata_size) + " bytes with " + strconv.Itoa(torrent.num_metadata_pieces()) + " pieces)")
 		fmt.Println("-------------")
 		fmt.Println(torrent.metadata.String())
@@ -189,8 +187,11 @@ func (torrent *Torrent) parse_metadata_file() (error) {
 	}
 
 	torrent.metadata = result
-	if len(result.Files) == 1 {
-		torrent.metadata.Length = result.Files[0].Length
+
+	if len(result.Files) >= 1 {
+		for i := 0; i < len(result.Files); i++ {
+			torrent.metadata.Length += result.Files[i].Length
+		}
 	}
 
 	torrent.display_name = torrent.metadata.Name

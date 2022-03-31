@@ -12,5 +12,7 @@ func main() {
 
 	// Links defined in magnet_links.go for now
 	torrent := new_torrent(LINK, default_connections)
+//	torrent.parse_metadata_file()
+//	torrent.print_info()
 	torrent.start_download()
 }
