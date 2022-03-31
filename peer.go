@@ -264,7 +264,7 @@ func (peer *Peer) queue_blocks() {
 		}
 	}
 	peer.requests = make([]byte, ((peer.torrent.get_num_blocks()) + 8) / 8)
-	queue_size := 15
+	queue_size := 30
 	
 	for i := 0; i < queue_size; i++ {
 		piece, offset := peer.get_new_block()
@@ -310,5 +310,5 @@ func (peer *Peer) get_new_block() (int, int) {
 }
 
 func (peer *Peer) has_piece (piece_num int) (bool) {
-	return (peer.bitfield[(piece_num / int(8))] >> ((7 - piece_num) % 8)) & 1 == 1
+	return (peer.bitfield[(piece_num / int(8))] >> (7 - (piece_num % 8))) & 1 == 1
 }

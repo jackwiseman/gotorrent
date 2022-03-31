@@ -31,6 +31,8 @@ type Torrent struct {
 
 	pieces []Piece
 	obtained_blocks []byte // similar to 'metadata pieces', allows for quick bitwise checking which pieces we have, if the ith bit is set to 1 we have that block
+	num_pieces_mx sync.Mutex
+	num_pieces int
 
 	log_file *os.File
 
@@ -230,11 +232,21 @@ func (torrent *Torrent) start_download() {
 }
 
 func (torrent *Torrent) set_block(piece_index int, offset int, data []byte) {
+	defer torrent.num_pieces_mx.Unlock()
+	torrent.num_pieces_mx.Lock()
+
+	if torrent.has_block(piece_index, offset) {
+		return
+	}
+
 	torrent.pieces[piece_index].blocks[offset/BLOCK_LEN].data = data
 	block_index := (piece_index * torrent.get_num_blocks_in_piece() + (offset / BLOCK_LEN))
 	torrent.obtained_blocks[block_index/8] = torrent.obtained_blocks[block_index/8] | (1 << (7 - (block_index % 8)))
-	fmt.Printf("\nPiece (%d, %d) recieved\n", piece_index, offset/BLOCK_LEN)
-	fmt.Println(torrent.obtained_blocks)
+//	fmt.Printf("\nPiece (%d, %d) recieved\n", piece_index, offset/BLOCK_LEN)
+	torrent.num_pieces++
+	fmt.Printf("Block %d/%d received (%d, %d)\n", torrent.num_pieces, torrent.get_num_blocks(), piece_index, offset/BLOCK_LEN)
+
+//	fmt.Println(torrent.obtained_blocks)
 }
 
 func (torrent *Torrent) has_block(piece_index int, offset int) (bool) {
