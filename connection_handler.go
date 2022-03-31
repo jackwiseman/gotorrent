@@ -38,18 +38,12 @@ func (torrent *Torrent) new_connection_handler() (*Connection_Handler) {
 }
 
 func (ch *Connection_Handler) run () {
-	defer ch.logger.Println("Connection handler finished running")
+	defer ch.logger.Println("Finished running")
 
 	for {
-		ch.logger.Println(ch.String())
-		ch.logger.Printf("Need to add %d new peers", ch.torrent.max_peers - len(ch.active_connections))
+		// ch.logger.Println(ch.String())
+		// ch.logger.Printf("Need to add %d new peers", ch.torrent.max_peers - len(ch.active_connections))
 		for i := 0; i < ch.torrent.max_peers - len(ch.active_connections); i++ {
-			if len(ch.active_connections) >= ch.torrent.max_peers {
-				ch.logger.Println("This should never be triggered")
-				// no need to add more peers -- realistically this shouldn't happen though?
-				break
-			}
-
 			if ch.next_peer_index >= len(ch.torrent.peers) - 1 {
 				if len(ch.active_connections) == 0 {
 					ch.logger.Println("Connected to all peers")
@@ -62,26 +56,6 @@ func (ch *Connection_Handler) run () {
 			ch.active_connections = append(ch.active_connections, &ch.torrent.peers[ch.next_peer_index])
 			go ch.active_connections[len(ch.active_connections) - 1].run(ch.done_chan)
 			ch.next_peer_index++
-
-
-
-			//if ch.torrent.has_all_metadata() {
-			//	for i := 0; i < len(ch.active_connections); i++ {
-			//		if ch.active_connections[i].choked {
-			//			ch.active_connections[i].send_interested()
-			//		} else {
-			//			if !ch.torrent.has_all_data() {
-			//				ch.logger.Println("Attempting to get a new block")
-	////						ch.active_connections[i].request_block()
-			//				go ch.active_connections[i].get_new_block()
-			//			} else {
-			//				ch.logger.Println("Got all data, exiting!")
-			//				ch.torrent.build_file()
-			//				return
-			//			}
-			//		}
-			//	}
-			//}
 		}
 		ch.remove_connection(<- ch.done_chan) // block until someone disconnects
 	}
@@ -89,7 +63,6 @@ func (ch *Connection_Handler) run () {
 
 // remove peer from the connection slice
 func (ch *Connection_Handler) remove_connection(peer *Peer) {
-//	ch.edit_connected_peers.Lock()
 	if len(ch.active_connections) == 1 {
 		ch.active_connections = []*Peer{}
 	} else {
@@ -100,9 +73,6 @@ func (ch *Connection_Handler) remove_connection(peer *Peer) {
 			}
 		}
 	}
-	
-	ch.logger.Println("Goodbye " + peer.ip)
-//	ch.edit_connected_peers.Unlock()
 }
 
 // Prints all alive connections

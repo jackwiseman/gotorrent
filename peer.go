@@ -43,7 +43,7 @@ func new_peer(ip string, port string, torrent *Torrent) (*Peer) {
 	peer.port = port
 	peer.torrent = torrent
 	peer.choked = true
-	peer.logger = log.New(peer.torrent.log_file, "[Peer] " + peer.ip + ": ", 0/*log.Ltime | log.Lshortfile*/)
+	peer.logger = log.New(peer.torrent.log_file, "[Peer] " + peer.ip + ": ", log.Ltime | log.Lshortfile)
 
 	return &peer
 }
@@ -175,12 +175,11 @@ func (peer *Peer) perform_handshake () (error) {
 		return errors.New("Error: could not read from peer")
 	}
 
-	// need to confirm that peerid is the same as supplied on tracker
+	// TODO: confirm that peerid is the same as supplied on tracker
 
 	// if the peer utilizes extended messages (most likely), we next need to send an extended handshake, mostly just for getting metadata
 	if buf[24] & 0x10 == 16 {
 		peer.uses_extended = true
-		//fmt.Println("Peer supports extended messaging, performing extended message handshake")
 		outgoing_extended_handshake := get_extended_handshake_message()
 
 		bytes_written, err := peer.conn.Write(outgoing_extended_handshake)
@@ -211,10 +210,6 @@ func (peer *Peer) perform_handshake () (error) {
 			peer.torrent.metadata_pieces = make([]byte, (peer.torrent.num_metadata_pieces() + 7) / 8)
 			peer.logger.Println(peer.torrent.metadata_pieces)
 			peer.logger.Println(peer.torrent.num_metadata_pieces())
-			//	fmt.Println("Metadata size:")
-			//	fmt.Println(torrent.metadata_size)
-			//	fmt.Println("Pieces: ")
-			//	fmt.Println(int(math.Round(float64(torrent.metadata_size)/float64(16384) + 1.0))) // this is not correct
 		}
 	} 
 	return nil
@@ -268,6 +263,7 @@ func (peer *Peer) queue_blocks() {
 	
 	for i := 0; i < queue_size; i++ {
 		piece, offset := peer.get_new_block()
+		peer.logger.Printf("- (%d, %d)", piece, offset)
 		if piece == -1 {
 			continue
 		}
@@ -297,6 +293,7 @@ func (peer *Peer) made_request(piece int, offset int) (bool) {
 func (peer *Peer) get_new_block() (int, int) {
 	rand.Seed(time.Now().UnixNano())
 	if peer.torrent.has_all_data() {
+		peer.logger.Println("Option 1")
 		return -1, -1
 	}
 

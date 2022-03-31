@@ -111,6 +111,10 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 			case PIECE:
 				pr.logger.Println("Received PIECE")
 
+				if length_prefix > BLOCK_LEN + 9 {
+					pr.logger.Println("PIECE MESSAGE WAS TOO LONG")
+					continue
+				}
 				index_buf := make([]byte, 4)
 				begin_buf := make([]byte, 4)
 
@@ -171,8 +175,6 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 					pr.logger.Println(err)
 					return
 				}
-
-
 			case EXTENDED:
 				pr.logger.Println("Received EXTENDED")
 				extended_id_buf := make([]byte, 1)
@@ -223,7 +225,11 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 						pr.logger.Println(err)
 						return
 					}
-					pr.peer.torrent.parse_metadata_file()
+					err = pr.peer.torrent.parse_metadata_file()
+					if err != nil {
+						pr.logger.Println(err)
+						return
+					}
 				}
 
 				pr.peer.torrent.metadata_mx.Unlock()

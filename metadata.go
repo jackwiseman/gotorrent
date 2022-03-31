@@ -23,7 +23,8 @@ type Metadata struct {
 // for use in bencoding
 type Metadata_file struct {
 	Length int "length"
-	Path map[string]string //"path"
+	Path []string "path"
+//	Path map[string]string //"path"
 }
 
 
