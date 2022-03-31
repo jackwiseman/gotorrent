@@ -8,6 +8,7 @@ import (
 	"log"
 	"encoding/binary"
 	"math/rand"
+	"io/ioutil"
 )
 
 type Peer struct {
@@ -44,13 +45,13 @@ func new_peer(ip string, port string, torrent *Torrent) (*Peer) {
 	peer.torrent = torrent
 	peer.choked = true
 	peer.logger = log.New(peer.torrent.log_file, "[Peer] " + peer.ip + ": ", log.Ltime | log.Lshortfile)
+	peer.logger.SetOutput(ioutil.Discard)
 
 	return &peer
 }
 
 func (peer *Peer) run(done_ch chan *Peer) {
 	defer peer.disconnect(done_ch) // ideally this mutex shouldn't just be passed around as much
-
 
 	peer.logger.Printf("Connecting")
 

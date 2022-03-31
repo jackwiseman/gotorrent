@@ -35,7 +35,6 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 
 	for {
 		// disconnect if we don't receive a KEEP ALIVE (or any message) for 2 minutes
-		pr.logger.Println("Waiting...")
 		pr.conn.SetReadDeadline(time.Now().Add(time.Minute * time.Duration(2)))
 
 		length_prefix_buf := make([]byte, 4)
@@ -190,10 +189,19 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 				}
 
 				payload_buf := make([]byte, length_prefix - 2)
-				_, err = pr.conn.Read(payload_buf)
-				if err != nil {
-					pr.logger.Println(err)
-					return
+				total_read := 0
+				for total_read < length_prefix - 2 { 
+					temp_buf := make([]byte, len(payload_buf) - total_read)
+					n, err := pr.conn.Read(temp_buf)
+					if err != nil {
+						pr.logger.Println(err)
+						return
+					}
+					payload_buf_remainder := payload_buf[total_read + n:]
+					payload_buf = append(payload_buf[0:total_read], temp_buf[:n]...)
+					payload_buf = append(payload_buf, payload_buf_remainder...)
+					pr.logger.Println(n)
+					total_read += n
 				}
 
 				bencode_end := bytes.Index(payload_buf, []byte("ee")) + 2

@@ -4,6 +4,7 @@ import (
 	"time"
 	"sync"
 	"log"
+	"io/ioutil"
 )
 
 type Connection_Handler struct {
@@ -33,6 +34,7 @@ func (torrent *Torrent) new_connection_handler() (*Connection_Handler) {
 	ch.done_chan = make(chan *Peer)
 
 	ch.logger = log.New(torrent.log_file, "[Connection Handler] ", log.Ltime | log.Lshortfile)
+	ch.logger.SetOutput(ioutil.Discard)
 	
 	return &ch
 }
