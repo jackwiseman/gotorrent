@@ -14,10 +14,6 @@ type Peer_Reader struct {
 	peer *Peer
 	conn net.Conn
 	logger *log.Logger
-
-//	reader bufio.Reader
-//	buf_size int
-
 }
 
 func new_peer_reader(peer *Peer) (*Peer_Reader) {
@@ -28,7 +24,6 @@ func new_peer_reader(peer *Peer) (*Peer_Reader) {
 	return &pr
 }
 
-// will need to also include keepalive messages
 func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 	defer pr.peer.pw.stop()
 	defer wg.Done()
@@ -149,8 +144,6 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 				begin := int(binary.BigEndian.Uint32(begin_buf))
 
 				pr.logger.Printf("Index: %d, Begin: %d", index, begin)
-				//pr.logger.Println(block_buf)
-				//pr.logger.Println(len(block_buf))
 
 				pr.peer.torrent.set_block(index, begin, block_buf)
 
