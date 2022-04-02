@@ -1,24 +1,24 @@
 package main
 
 import (
-	"sync"
-	"net"
-	"time"
-	"errors"
-	"log"
 	"encoding/binary"
-	"math/rand"
+	"errors"
 	"io/ioutil"
+	"log"
+	"math/rand"
+	"net"
+	"sync"
+	"time"
 )
 
 type Peer struct {
-	ip string
-	port string
-	conn net.Conn
+	ip            string
+	port          string
+	conn          net.Conn
 	uses_extended bool // false by default
-	extensions map[string]int
-	choked bool // whether we are choked by this peer or not, will likely need a name change upon seed support
-	bitfield []byte
+	extensions    map[string]int
+	choked        bool // whether we are choked by this peer or not, will likely need a name change upon seed support
+	bitfield      []byte
 
 	torrent *Torrent // associated torrent
 
@@ -37,14 +37,14 @@ func (peer *Peer) set_extensions(extensions map[string]int) {
 	peer.extensions = extensions
 }
 
-func new_peer(ip string, port string, torrent *Torrent) (*Peer) {
+func new_peer(ip string, port string, torrent *Torrent) *Peer {
 	var peer Peer
 
 	peer.ip = ip
 	peer.port = port
 	peer.torrent = torrent
 	peer.choked = true
-	peer.logger = log.New(peer.torrent.log_file, "[Peer] " + peer.ip + ": ", log.Ltime | log.Lshortfile)
+	peer.logger = log.New(peer.torrent.log_file, "[Peer] "+peer.ip+": ", log.Ltime|log.Lshortfile)
 	peer.logger.SetOutput(ioutil.Discard)
 
 	return &peer
@@ -87,25 +87,25 @@ func (peer *Peer) run(done_ch chan *Peer) {
 
 }
 
-func (peer *Peer) supports_metadata_requests() (bool) {
+func (peer *Peer) supports_metadata_requests() bool {
 	if !peer.uses_extended {
 		return false
 	}
 	_, ok := peer.extensions["ut_metadata"]
-        if !ok {
-                return false
-        }
+	if !ok {
+		return false
+	}
 	return true
 }
 
 // Connect to peer via TCP and create a peer_reader over connection
-func (peer *Peer) connect() (error) {
-	timeout := time.Second * 10 
-	conn, err := net.DialTimeout("tcp", peer.ip + ":" + peer.port, timeout)
+func (peer *Peer) connect() error {
+	timeout := time.Second * 10
+	conn, err := net.DialTimeout("tcp", peer.ip+":"+peer.port, timeout)
 
 	if err != nil {
 		return err
-	} 
+	}
 
 	peer.conn = conn
 	peer.pr = new_peer_reader(peer)
@@ -130,15 +130,15 @@ func (peer *Peer) request_block(piece_num int, offset int) {
 
 	payload := make([]byte, 12)
 	binary.BigEndian.PutUint32(payload[0:], uint32(piece_num))
-	binary.BigEndian.PutUint32(payload[4:], uint32(offset * BLOCK_LEN))
+	binary.BigEndian.PutUint32(payload[4:], uint32(offset*BLOCK_LEN))
 
 	// if this is the last blocks, we need to request the correct len
-	if (piece_num * peer.torrent.get_num_blocks_in_piece()) + offset + 1 == peer.torrent.get_num_blocks() {
-		binary.BigEndian.PutUint32(payload[8:], uint32(peer.torrent.metadata.Length % BLOCK_LEN))
+	if (piece_num*peer.torrent.get_num_blocks_in_piece())+offset+1 == peer.torrent.get_num_blocks() {
+		binary.BigEndian.PutUint32(payload[8:], uint32(peer.torrent.metadata.Length%BLOCK_LEN))
 	} else {
 		binary.BigEndian.PutUint32(payload[8:], uint32(BLOCK_LEN))
 	}
-	
+
 	peer.pw.write(Message{13, REQUEST, payload})
 }
 
@@ -150,7 +150,7 @@ func (peer *Peer) disconnect(done_ch chan *Peer) {
 	done_ch <- peer
 }
 
-func (peer *Peer) perform_handshake () (error) {
+func (peer *Peer) perform_handshake() error {
 	if peer.conn == nil {
 		return errors.New("Error: peer's connection is nil")
 	}
@@ -170,7 +170,7 @@ func (peer *Peer) perform_handshake () (error) {
 
 	pstrlen := int(pstrlen_buf[0])
 
-	buf := make([]byte, 48 + pstrlen)
+	buf := make([]byte, 48+pstrlen)
 	_, err = peer.conn.Read(buf)
 	if err != nil {
 		return errors.New("Error: could not read from peer")
@@ -179,7 +179,7 @@ func (peer *Peer) perform_handshake () (error) {
 	// TODO: confirm that peerid is the same as supplied on tracker
 
 	// if the peer utilizes extended messages (most likely), we next need to send an extended handshake, mostly just for getting metadata
-	if buf[24] & 0x10 == 16 {
+	if buf[24]&0x10 == 16 {
 		peer.uses_extended = true
 		outgoing_extended_handshake := get_extended_handshake_message()
 
@@ -193,7 +193,7 @@ func (peer *Peer) perform_handshake () (error) {
 		if err != nil {
 			return err
 		}
-		
+
 		length_prefix := binary.BigEndian.Uint32(length_prefix_buf[0:])
 
 		buf = make([]byte, int(length_prefix))
@@ -208,16 +208,16 @@ func (peer *Peer) perform_handshake () (error) {
 		if result.Metadata_size != 0 && peer.torrent.metadata_size == 0 { // make sure they attached metadata size, also no reason to overwrite if we already set
 			peer.torrent.metadata_size = result.Metadata_size
 			peer.torrent.metadata_raw = make([]byte, result.Metadata_size)
-			peer.torrent.metadata_pieces = make([]byte, (peer.torrent.num_metadata_pieces() + 7) / 8)
+			peer.torrent.metadata_pieces = make([]byte, (peer.torrent.num_metadata_pieces()+7)/8)
 			peer.logger.Println(peer.torrent.metadata_pieces)
 			peer.logger.Println(peer.torrent.num_metadata_pieces())
 		}
-	} 
+	}
 	return nil
 }
 
 // nominally we'd like to just disconnect from this peer if they don't provide a bitfield, since seeding will probably be implemented later
-func (peer *Peer) get_bitfield () (error) {
+func (peer *Peer) get_bitfield() error {
 	length_prefix_buf := make([]byte, 4)
 	message_id_buf := make([]byte, 1)
 
@@ -239,7 +239,7 @@ func (peer *Peer) get_bitfield () (error) {
 		return errors.New("Got unexpected message from peer, expecting BITFIELD")
 	}
 
-	bitfield_buf := make([]byte, length_prefix - 1)
+	bitfield_buf := make([]byte, length_prefix-1)
 	_, err = peer.conn.Read(bitfield_buf)
 	if err != nil {
 		return err
@@ -259,9 +259,9 @@ func (peer *Peer) queue_blocks() {
 			break
 		}
 	}
-	peer.requests = make([]byte, ((peer.torrent.get_num_blocks()) + 8) / 8)
+	peer.requests = make([]byte, ((peer.torrent.get_num_blocks())+8)/8)
 	queue_size := 30
-	
+
 	for i := 0; i < queue_size; i++ {
 		piece, offset := peer.get_new_block()
 		peer.logger.Printf("- (%d, %d)", piece, offset)
@@ -276,17 +276,18 @@ func (peer *Peer) queue_blocks() {
 
 func (peer *Peer) request_new_block() {
 	go peer.torrent.check_download_status()
-	piece, offset := peer.get_new_block() 
+	piece, offset := peer.get_new_block()
 	if piece == -1 {
 		return
 	}
 
 	peer.request_block(piece, offset)
 }
+
 // Return true if we have requested this block from this peer
-func (peer *Peer) made_request(piece int, offset int) (bool) {
+func (peer *Peer) made_request(piece int, offset int) bool {
 	index := (piece * peer.torrent.get_num_blocks_in_piece()) + offset
-	return (peer.requests[index/8] >> (7 - (index % 8))) & 1 == 1 
+	return (peer.requests[index/8]>>(7-(index%8)))&1 == 1
 }
 
 // return a random piece + offset pair corresponding to a non downloaded block
@@ -302,14 +303,14 @@ func (peer *Peer) get_new_block() (int, int) {
 		test_piece := rand.Intn(len(peer.torrent.pieces))
 		test_offset := rand.Intn(len(peer.torrent.pieces[test_piece].blocks))
 
-		if peer.has_piece(test_piece) && !peer.made_request(test_piece, test_offset) && !peer.torrent.has_block(test_piece, test_offset * BLOCK_LEN) {
+		if peer.has_piece(test_piece) && !peer.made_request(test_piece, test_offset) && !peer.torrent.has_block(test_piece, test_offset*BLOCK_LEN) {
 			return test_piece, test_offset
 		}
 	}
-	
+
 	return -1, -1
 }
 
-func (peer *Peer) has_piece (piece_num int) (bool) {
-	return (peer.bitfield[(piece_num / int(8))] >> (7 - (piece_num % 8))) & 1 == 1
+func (peer *Peer) has_piece(piece_num int) bool {
+	return (peer.bitfield[(piece_num/int(8))]>>(7-(piece_num%8)))&1 == 1
 }

@@ -1,26 +1,26 @@
 package main
 
 import (
-	"net"
-	"time"
-	"errors"
 	"encoding/binary"
-	"math"
+	"errors"
 	"fmt"
+	"math"
+	"net"
 	"strconv"
+	"time"
 )
 
 type Tracker struct {
-	link string
-	conn net.Conn
-	timeout time.Duration // default is 15 seconds
+	link          string
+	conn          net.Conn
+	timeout       time.Duration // default is 15 seconds
 	connection_id uint64
-	expires time.Time
-	retries int
+	expires       time.Time
+	retries       int
 }
 
 // return a new tracker from a string representing the link
-func new_tracker(link string) (*Tracker) {
+func new_tracker(link string) *Tracker {
 	return &Tracker{link: link, timeout: 15 * time.Second, retries: 1}
 }
 
@@ -29,10 +29,10 @@ func (tracker *Tracker) set_timeout(seconds int) {
 }
 
 // for now, only works for udp links, which seem to be standard
-func (tracker *Tracker) connect() (error) {
+func (tracker *Tracker) connect() error {
 	conn, err := net.DialTimeout("udp", tracker.link, tracker.timeout)
 	if err != nil {
-		return(err)
+		return (err)
 	}
 	tracker.conn = conn
 	return nil
@@ -43,11 +43,12 @@ func (tracker *Tracker) disconnect() {
 }
 
 // the first step in getting peers from the tracker is getting a connection_id, which is valid for 2 minutes
-func (tracker *Tracker) set_connection_id() (error) {
+func (tracker *Tracker) set_connection_id() error {
 	for i := 0; i <= tracker.retries; i++ {
 		// Create a new Connection_Request with a new transaction_id
-		transaction_id, err := get_transaction_id(); if err != nil {
-			return(err)
+		transaction_id, err := get_transaction_id()
+		if err != nil {
+			return (err)
 		}
 
 		// Serialize a 16 byte request for a connection id where
@@ -62,26 +63,27 @@ func (tracker *Tracker) set_connection_id() (error) {
 
 		// Set a write deadline of 15 seconds and connect
 		tracker.conn.SetWriteDeadline(time.Now().Add(tracker.timeout))
-		bytes_written, err := tracker.conn.Write(packet); if err != nil {
-			return(err)
+		bytes_written, err := tracker.conn.Write(packet)
+		if err != nil {
+			return (err)
 		}
 		if bytes_written < len(packet) {
-			return(errors.New("Error: did not write 16 bytes"))
+			return (errors.New("Error: did not write 16 bytes"))
 		}
 
 		// Per BitTorrent.org specificiations, "If a response is not recieved after 15 * 2 ^ n seconds, client should retransmit, where n increases to 8 from 0
-		tracker.conn.SetReadDeadline(time.Now().Add(time.Second * time.Duration(int(15 * math.Pow(2,float64(i))))))
+		tracker.conn.SetReadDeadline(time.Now().Add(time.Second * time.Duration(int(15*math.Pow(2, float64(i))))))
 
 		// Expecting a 16 byte response where
 		// Offset	Name		Value
 		// 0		action		0 - connect
-		// 4		transaction_id	should be same that was sent	
-		// 8		connection_id		
+		// 4		transaction_id	should be same that was sent
+		// 8		connection_id
 		buf := make([]byte, 16)
 
 		bytes_read, err := tracker.conn.Read(buf)
 		if err != nil && i == tracker.retries {
-			return(err)
+			return (err)
 		} else {
 			if bytes_read != 16 {
 				return errors.New("Error: did not read 16 bytes") // try again?
@@ -101,15 +103,16 @@ func (tracker *Tracker) set_connection_id() (error) {
 
 // not really necessary at the moment, maybe use strictly to print info?
 // only really interresting for # of seeders
-func (tracker *Tracker) scrape(torrent *Torrent) (error) {
+func (tracker *Tracker) scrape(torrent *Torrent) error {
 	for i := 0; i <= tracker.retries; i++ {
-		transaction_id, err := get_transaction_id(); if err != nil {
-			return(err)
+		transaction_id, err := get_transaction_id()
+		if err != nil {
+			return (err)
 		}
 
 		packet_len := 16 + len(torrent.info_hash) // this will always be 20, but will stay here for future scalability
 
-		packet := make([]byte, 16 + (20 ))
+		packet := make([]byte, 16+(20))
 		binary.BigEndian.PutUint64(packet[0:], tracker.connection_id)
 		binary.BigEndian.PutUint32(packet[8:], 2) // action 2 = scrape
 		binary.BigEndian.PutUint32(packet[12:], transaction_id)
@@ -118,21 +121,22 @@ func (tracker *Tracker) scrape(torrent *Torrent) (error) {
 
 		tracker.conn.SetWriteDeadline(time.Now().Add(tracker.timeout))
 
-		bytes_written, err := tracker.conn.Write(packet); if err != nil {
-			return(err)
+		bytes_written, err := tracker.conn.Write(packet)
+		if err != nil {
+			return (err)
 		}
 		if bytes_written < len(packet) {
 			return errors.New("Error: did not write scrape request")
 		}
 
-		buf := make([]byte, 8 + (12 * packet_len))
+		buf := make([]byte, 8+(12*packet_len))
 		// Per BitTorrent.org specificiations, "If a response is not recieved after 15 * 2 ^ n seconds, client should retransmit, where n increases to 8 from 0
-		tracker.conn.SetReadDeadline(time.Now().Add(time.Second * time.Duration(int(15 * math.Pow(2,float64(i))))))
+		tracker.conn.SetReadDeadline(time.Now().Add(time.Second * time.Duration(int(15*math.Pow(2, float64(i))))))
 
 		bytes_read, err := tracker.conn.Read(buf)
 		if err != nil {
 			if i == tracker.retries {
-				return(err)
+				return (err)
 			}
 		} else {
 			if bytes_read <= 16 {
@@ -167,7 +171,8 @@ func (tracker *Tracker) scrape(torrent *Torrent) (error) {
 // returns # of seeders
 func (tracker *Tracker) announce(torrent *Torrent, num_want int) (int, error) {
 	for i := 0; i <= tracker.retries; i++ {
-		transaction_id, err := get_transaction_id(); if err != nil {
+		transaction_id, err := get_transaction_id()
+		if err != nil {
 			return 0, err
 		}
 
@@ -209,11 +214,11 @@ func (tracker *Tracker) announce(torrent *Torrent, num_want int) (int, error) {
 			return 0, errors.New("Error: could not write announce request")
 		}
 
-		buf := make([]byte, 20 + (6 * num_want))
-		tracker.conn.SetReadDeadline(time.Now().Add(time.Second * time.Duration(int(15 * math.Pow(2,float64(i)))))) // BEP 15 - If a response is not received after 15 * 2 ^ n seconds, the client should retransmit the request, where n starts at 0 and is increased up to 8 (3840 seconds) after every retransmission
+		buf := make([]byte, 20+(6*num_want))
+		tracker.conn.SetReadDeadline(time.Now().Add(time.Second * time.Duration(int(15*math.Pow(2, float64(i)))))) // BEP 15 - If a response is not received after 15 * 2 ^ n seconds, the client should retransmit the request, where n starts at 0 and is increased up to 8 (3840 seconds) after every retransmission
 
 		bytes_read, err := tracker.conn.Read(buf)
-		if (bytes_read < 20 || err != nil) {
+		if bytes_read < 20 || err != nil {
 			if i >= tracker.retries {
 				return 0, err
 			}
@@ -222,8 +227,8 @@ func (tracker *Tracker) announce(torrent *Torrent, num_want int) (int, error) {
 
 		seeders := int(binary.BigEndian.Uint32(buf[16:]))
 		for j := 0; j < int(math.Min(float64(num_want), float64(seeders))); j++ {
-			ip_address_raw := binary.BigEndian.Uint32(buf[20 + (6 * j):])
-			port := binary.BigEndian.Uint16(buf[24 + (6 * j):])
+			ip_address_raw := binary.BigEndian.Uint32(buf[20+(6*j):])
+			port := binary.BigEndian.Uint16(buf[24+(6*j):])
 
 			// convert ip_address into a string representation
 			ip_address := make(net.IP, 4)

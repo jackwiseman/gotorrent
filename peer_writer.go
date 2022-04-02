@@ -3,35 +3,36 @@ package main
 import (
 	"net"
 	"time"
-//	"encoding/binary"
-	"sync"
+
+	//	"encoding/binary"
 	"bufio"
 	"log"
+	"sync"
 )
 
 const KEEP_ALIVE = uint8(0)
 
 type Peer_Writer struct {
-	conn net.Conn
-	writer *bufio.Writer
+	conn     net.Conn
+	writer   *bufio.Writer
 	buf_size int
-	peer *Peer
-	logger *log.Logger
+	peer     *Peer
+	logger   *log.Logger
 
 	message_ch chan []byte // probably need to initialize this?
 
-	// for scheduling purposes 
-	keep_alive_ticker *time.Ticker
+	// for scheduling purposes
+	keep_alive_ticker       *time.Ticker
 	metadata_request_ticker *time.Ticker
 }
 
-func new_peer_writer(peer *Peer) (*Peer_Writer) {
+func new_peer_writer(peer *Peer) *Peer_Writer {
 	var pw Peer_Writer
 	pw.peer = peer
 	pw.conn = peer.conn
 	pw.buf_size = 6 // len + id + (extension id if id == 20)
 	pw.writer = bufio.NewWriterSize(pw.conn, pw.buf_size)
-	pw.logger = log.New(peer.torrent.log_file, "[Peer Writer] " + pw.peer.ip + ": ", log.Ltime | log.Lshortfile)
+	pw.logger = log.New(peer.torrent.log_file, "[Peer Writer] "+pw.peer.ip+": ", log.Ltime|log.Lshortfile)
 	pw.message_ch = make(chan []byte)
 	return &pw
 }
@@ -70,7 +71,7 @@ func (pw *Peer_Writer) send_metadata_request(piece_num int) {
 // todo make sure mutexes are used when checking pieces
 func (pw *Peer_Writer) metadata_request_scheduler() {
 	pw.metadata_request_ticker = time.NewTicker(15 * time.Second)
-	for _ = range(pw.metadata_request_ticker.C) {
+	for _ = range pw.metadata_request_ticker.C {
 		if pw.peer.torrent.has_all_metadata() {
 			pw.metadata_request_ticker.Stop()
 			go pw.peer.queue_blocks()
@@ -86,10 +87,10 @@ func (pw *Peer_Writer) metadata_request_scheduler() {
 
 func (pw *Peer_Writer) keep_alive_scheduler() {
 	pw.keep_alive_ticker = time.NewTicker(1 * time.Minute)
-	for _ = range(pw.keep_alive_ticker.C) {
+	for _ = range pw.keep_alive_ticker.C {
 		pw.conn.Write([]byte{0, 0, 0, 0})
 	}
-	pw.keep_alive_ticker.Stop() 
+	pw.keep_alive_ticker.Stop()
 }
 
 func (pw *Peer_Writer) run(wg *sync.WaitGroup) {
@@ -102,7 +103,7 @@ func (pw *Peer_Writer) run(wg *sync.WaitGroup) {
 	}
 
 	for {
-		msg := <- pw.message_ch
+		msg := <-pw.message_ch
 
 		pw.logger.Println(msg)
 

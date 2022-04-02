@@ -1,46 +1,47 @@
 package main
 
 import (
-	"fmt"
-	"os"
-	"math"
-	"strings"
-	"strconv"
-	"encoding/hex"
-	"sync"	
-	"io/ioutil"
 	"bytes"
+	"encoding/hex"
+	"fmt"
+	"io/ioutil"
+	"math"
+	"os"
+	"strconv"
+	"strings"
+	"sync"
+
 	bencode "github.com/jackpal/bencode-go"
 )
 
 type Torrent struct {
-	magnet_link string
+	magnet_link  string
 	display_name string
-	info_hash []byte
+	info_hash    []byte
 
-	trackers []Tracker
-	peers []Peer // all peers collected by the tracker, not necessarily connected
+	trackers  []Tracker
+	peers     []Peer // all peers collected by the tracker, not necessarily connected
 	max_peers int
 
 	// Metadata-specific
-	metadata_size int // in bytes, given by first extended handshake
-	metadata_raw []byte
+	metadata_size   int // in bytes, given by first extended handshake
+	metadata_raw    []byte
 	metadata_pieces []byte // array of [1/0, 1/0,...] denoting whether we have the piece or not
-	metadata Metadata
-	metadata_mx sync.Mutex // to ensure that that we only trigger "building" the metadata once
+	metadata        Metadata
+	metadata_mx     sync.Mutex // to ensure that that we only trigger "building" the metadata once
 
-	pieces []Piece
+	pieces          []Piece
 	obtained_blocks []byte // similar to 'metadata pieces', allows for quick bitwise checking which pieces we have, if the ith bit is set to 1 we have that block
-	num_pieces_mx sync.Mutex
-	num_pieces int
+	num_pieces_mx   sync.Mutex
+	num_pieces      int
 
 	log_file *os.File
 
 	conn_handler *Connection_Handler
 }
 
-// for simplicity, only magnet links will be supported for now
-func new_torrent(magnet_link string, max_peers int) (*Torrent) {
+// for simplicity, only magnet links will be supportd for no
+func new_torrent(magnet_link string, max_peers int) *Torrent {
 	var torrent Torrent
 	torrent.log_file, _ = os.Create("debug.log")
 	torrent.magnet_link = magnet_link
@@ -56,7 +57,7 @@ func new_torrent(magnet_link string, max_peers int) (*Torrent) {
 func (torrent *Torrent) parse_magnet_link() {
 	data := strings.Split(torrent.magnet_link, "&")
 	for i := 0; i < len(data); i++ {
-		switch(data[i][:2]) {
+		switch data[i][:2] {
 		case "dn":
 			torrent.display_name = strings.Replace(data[i][3:], "%20", " ", -1)
 		case "tr":
@@ -66,7 +67,7 @@ func (torrent *Torrent) parse_magnet_link() {
 
 			for index < tracker_len {
 				if strings.Compare(string(tracker_link[index]), "%") == 0 {
-					token, err := hex.DecodeString(string(tracker_link[index+1:index+3]))
+					token, err := hex.DecodeString(string(tracker_link[index+1 : index+3]))
 					if err != nil {
 						panic(err)
 					}
@@ -77,7 +78,7 @@ func (torrent *Torrent) parse_magnet_link() {
 			}
 			if tracker_link[0:3] == "udp" {
 				if strings.Contains(tracker_link, "announce") {
-					tracker_link = tracker_link[:len(tracker_link) - len("/announce")]
+					tracker_link = tracker_link[:len(tracker_link)-len("/announce")]
 				}
 				new_tracker := new_tracker(tracker_link[6:])
 				torrent.trackers = append(torrent.trackers, *new_tracker)
@@ -147,7 +148,7 @@ func (torrent *Torrent) find_peers() {
 			}
 
 			tracker.disconnect()
-		} (&wg, torrent.trackers[i])
+		}(&wg, torrent.trackers[i])
 	}
 	wg.Wait()
 
@@ -172,8 +173,8 @@ func (torrent *Torrent) remove_duplicate_peers() {
 	torrent.peers = trimmed
 }
 
-// assumes the filename is "metadata.torrent", which of course will not be valid in the future if there are multiple torrents
-func (torrent *Torrent) parse_metadata_file() (error) {
+// assumes the filename is "metadata.torrent",whichof course will not be valid in the future if there are multiple torrents
+func (torrent *Torrent) parse_metadata_file() error {
 	data, err := ioutil.ReadFile("metadata.torrent")
 	if err != nil {
 		return err
@@ -197,18 +198,18 @@ func (torrent *Torrent) parse_metadata_file() (error) {
 	torrent.display_name = torrent.metadata.Name
 
 	// create empty pieces slice
-	torrent.pieces = make([]Piece, int(math.Ceil(float64(torrent.metadata.Length) / float64(torrent.metadata.Piece_len))))
-	for i := 0; i < len(torrent.pieces) - 1; i++ {
-		torrent.pieces[i].blocks = make([]Block, torrent.metadata.Piece_len / (BLOCK_LEN))
+	torrent.pieces = make([]Piece, int(math.Ceil(float64(torrent.metadata.Length)/float64(torrent.metadata.Piece_len))))
+	for i := 0; i < len(torrent.pieces)-1; i++ {
+		torrent.pieces[i].blocks = make([]Block, torrent.metadata.Piece_len/(BLOCK_LEN))
 	}
-	torrent.pieces[len(torrent.pieces) - 1].blocks = make([]Block, int(math.Ceil(float64(torrent.metadata.Length - (torrent.metadata.Piece_len * (len(torrent.pieces) - 1))) / float64(BLOCK_LEN))))
-//	fmt.Println(torrent.pieces)
-	torrent.obtained_blocks = make([]byte, int(math.Ceil(float64(torrent.get_num_blocks()) / float64(8))))
+	torrent.pieces[len(torrent.pieces)-1].blocks = make([]Block, int(math.Ceil(float64(torrent.metadata.Length-(torrent.metadata.Piece_len*(len(torrent.pieces)-1)))/float64(BLOCK_LEN))))
+	//	fmt.Println(torrent.pieces)
+	torrent.obtained_blocks = make([]byte, int(math.Ceil(float64(torrent.get_num_blocks())/float64(8))))
 	//fmt.Println("------")
 	//fmt.Println(torrent.get_num_blocks())
 	// fmt.Println(torrent.obtained_blocks)
 	//fmt.Println("------")
-	
+
 	return nil
 }
 
@@ -225,12 +226,12 @@ func (torrent *Torrent) start_download() {
 	/*	var wg sync.WaitGroup
 
 
-	for i := 0; i < len(torrent.peers); i++ {
-		wg.Add(1)
-		go torrent.peers[i].run(torrent, &wg)
-	}
+			for i := 0; i < len(torrent.peers); i++ {
+				wg.Add(1)
+				go torrent.peers[i].run(torrent, &wg)
+		}
 
-	wg.Wait()*/
+		wg.Wait()*/
 }
 
 func (torrent *Torrent) set_block(piece_index int, offset int, data []byte) {
@@ -242,28 +243,28 @@ func (torrent *Torrent) set_block(piece_index int, offset int, data []byte) {
 	}
 
 	torrent.pieces[piece_index].blocks[offset/BLOCK_LEN].data = data
-	block_index := (piece_index * torrent.get_num_blocks_in_piece() + (offset / BLOCK_LEN))
+	block_index := (piece_index*torrent.get_num_blocks_in_piece() + (offset / BLOCK_LEN))
 	torrent.obtained_blocks[block_index/8] = torrent.obtained_blocks[block_index/8] | (1 << (7 - (block_index % 8)))
-//	fmt.Printf("\nPiece (%d, %d) recieved\n", piece_index, offset/BLOCK_LEN)
+	//	fmt.Printf("\nPiece (%d, %d) recieved\n", piece_index, offset/BLOCK_LEN)
 	torrent.num_pieces++
 	fmt.Printf("Block %d/%d received (%d, %d)\n", torrent.num_pieces, torrent.get_num_blocks(), piece_index, offset/BLOCK_LEN)
 
-//	fmt.Println(torrent.obtained_blocks)
+	//	fmt.Println(torrent.obtained_blocks)
 }
 
-func (torrent *Torrent) has_block(piece_index int, offset int) (bool) {
+func (torrent *Torrent) has_block(piece_index int, offset int) bool {
 	if torrent.obtained_blocks == nil {
 		return false
 	}
-	block_index := (piece_index * torrent.get_num_blocks_in_piece() + (offset / BLOCK_LEN))
-	return torrent.obtained_blocks[block_index / 8] >> (7 - (block_index % 8)) & 1 == 1
+	block_index := (piece_index*torrent.get_num_blocks_in_piece() + (offset / BLOCK_LEN))
+	return torrent.obtained_blocks[block_index/8]>>(7-(block_index%8))&1 == 1
 }
 
-func (torrent *Torrent) get_num_blocks() (int) {
+func (torrent *Torrent) get_num_blocks() int {
 	return int(math.Ceil(float64(torrent.metadata.Length) / float64(BLOCK_LEN)))
 }
 
-func (torrent *Torrent) get_num_blocks_in_piece() (int) {
+func (torrent *Torrent) get_num_blocks_in_piece() int {
 	return torrent.metadata.Piece_len / BLOCK_LEN
 }
 
@@ -273,19 +274,19 @@ func (torrent *Torrent) check_download_status() {
 	}
 }
 
-func (torrent *Torrent) has_all_data() (bool) {
+func (torrent *Torrent) has_all_data() bool {
 	//fmt.Println(torrent.obtained_blocks)
-	for i := 0; i < torrent.get_num_blocks() / 8; i++ {
+	for i := 0; i < torrent.get_num_blocks()/8; i++ {
 		if int(torrent.obtained_blocks[i]) != 255 {
 			return false
 		}
 	}
 
-	if torrent.get_num_blocks() % 8 == 0 {
+	if torrent.get_num_blocks()%8 == 0 {
 		return true
 	}
 
-	return int(torrent.obtained_blocks[len(torrent.obtained_blocks) - 1]) >> (8 - torrent.get_num_blocks() % 8) == (255 >> (8 - torrent.get_num_blocks() % 8))
+	return int(torrent.obtained_blocks[len(torrent.obtained_blocks)-1])>>(8-torrent.get_num_blocks()%8) == (255 >> (8 - torrent.get_num_blocks()%8))
 }
 
 func (torrent *Torrent) build_file() {
