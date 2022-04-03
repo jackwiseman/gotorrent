@@ -284,6 +284,9 @@ func (peer *Peer) queue_blocks(queue_size int) {
 
 // Send a request block message to this peer asking for a random non-downloaded block
 func (peer *Peer) request_new_block() {
+	if !peer.torrent.has_all_metadata() {
+		return
+	}
 	go peer.torrent.check_download_status()
 	piece, offset := peer.get_new_block()
 	if piece == -1 {
