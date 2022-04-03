@@ -11,6 +11,13 @@ import (
 	"time"
 )
 
+const (
+	BAD     = -1 // could not connect at all
+	UNKNOWN = 0  // have not attempted connected yet
+	DEAD    = 1  // lost connection some time after handshake + bitfield -- ie we can try to connect to them again
+	ALIVE   = 2  // currently connected
+)
+
 type Peer struct {
 	ip            string
 	port          string
@@ -19,6 +26,7 @@ type Peer struct {
 	extensions    map[string]int
 	choked        bool // whether we are choked by this peer or not, will likely need a name change upon seed support
 	bitfield      []byte
+	status        int
 
 	torrent *Torrent // associated torrent
 
@@ -45,19 +53,19 @@ func new_peer(ip string, port string, torrent *Torrent) *Peer {
 	peer.choked = true
 	peer.logger = log.New(peer.torrent.log_file, "[Peer] "+peer.ip+": ", log.Ltime|log.Lshortfile)
 	peer.logger.SetOutput(ioutil.Discard)
+	peer.status = UNKNOWN // implied by default
 
 	return &peer
 }
 
 func (peer *Peer) run(done_ch chan *Peer) {
-	defer peer.disconnect(done_ch) // ideally this mutex shouldn't just be passed around as much
-
 	peer.logger.Printf("Connecting")
 
 	err := peer.connect()
 	if err != nil {
 		peer.logger.Println("Connection error: " + err.Error())
 
+		peer.status = BAD
 		done_ch <- peer
 		return
 	}
@@ -65,6 +73,8 @@ func (peer *Peer) run(done_ch chan *Peer) {
 
 	if err != nil {
 		peer.logger.Println("Handshake error: " + err.Error())
+
+		peer.status = BAD
 		done_ch <- peer
 		return
 	}
@@ -72,6 +82,8 @@ func (peer *Peer) run(done_ch chan *Peer) {
 	err = peer.get_bitfield()
 	if err != nil {
 		peer.logger.Println("Bitfield error: " + err.Error())
+
+		peer.status = BAD
 		done_ch <- peer
 		return
 	}
@@ -84,6 +96,7 @@ func (peer *Peer) run(done_ch chan *Peer) {
 
 	wg.Wait()
 
+	peer.disconnect(done_ch)
 }
 
 func (peer *Peer) supports_metadata_requests() bool {
@@ -315,7 +328,7 @@ func (peer *Peer) get_new_block() (int, int) {
 		test_piece := rand.Intn(len(peer.torrent.pieces))
 		test_offset := rand.Intn(len(peer.torrent.pieces[test_piece].blocks))
 
-		if peer.has_piece(test_piece) && !peer.made_request(test_piece, test_offset) && !peer.torrent.has_block(test_piece, test_offset*BLOCK_LEN) {
+		if peer.has_piece(test_piece) /*&& !peer.made_request(test_piece, test_offset)*/ && !peer.torrent.has_block(test_piece, test_offset*BLOCK_LEN) {
 			return test_piece, test_offset
 		}
 	}

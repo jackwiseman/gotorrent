@@ -106,8 +106,6 @@ func (pw *Peer_Writer) run(wg *sync.WaitGroup) {
 	for {
 		msg := <-pw.message_ch
 
-		pw.logger.Println(msg)
-
 		if int(msg[4]) == STOP {
 			return
 		}

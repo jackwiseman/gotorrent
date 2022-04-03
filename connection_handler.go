@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io/ioutil"
 	"log"
 	"sync"
 	"time"
@@ -32,7 +31,7 @@ func (torrent *Torrent) new_connection_handler() *Connection_Handler {
 	ch.done_chan = make(chan *Peer)
 	// sometimes the block doesn't get fully read in one call here, TODO: investigate this behavior globally
 	ch.logger = log.New(torrent.log_file, "[Connection Handler] ", log.Ltime|log.Lshortfile)
-	ch.logger.SetOutput(ioutil.Discard)
+	//ch.logger.SetOutput(ioutil.Discard)
 
 	return &ch
 }
@@ -63,6 +62,7 @@ func (ch *Connection_Handler) run() {
 
 // remove peer from the connection slice
 func (ch *Connection_Handler) remove_connection(peer *Peer) {
+	ch.logger.Println(peer.ip)
 	if len(ch.active_connections) == 1 {
 		ch.active_connections = []*Peer{}
 	} else {
