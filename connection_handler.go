@@ -39,31 +39,30 @@ func (ch *Connection_Handler) run() {
 	defer ch.logger.Println("Finished running")
 
 	for {
-		// ch.logger.Println(ch.String())
-		// ch.logger.Printf("Need to add %d new peers", ch.torrent.max_peers - len(ch.active_connections))
+		bad_peers := 0
+		alive_peers := 0
 		// attempt to fill up missing connections to reach max_peers
-		for i := 0; i < ch.torrent.max_peers-len(ch.active_connections); i++ {
-			// skip this peer if it's either bad or already connected
-			if ch.torrent.peers[ch.next_peer_index].status == BAD || ch.torrent.peers[ch.next_peer_index].status == ALIVE {
-				ch.next_peer_index++
-				continue
+		for i := 0; i < len(ch.torrent.peers); i++ {
+			if len(ch.active_connections) >= ch.torrent.max_peers {
+				break
 			}
-			if ch.next_peer_index >= len(ch.torrent.peers)-1 {
-				ch.next_peer_index = 0
+			switch ch.torrent.peers[i].status {
+			case BAD:
+				bad_peers++
+				if i == len(ch.torrent.peers)-1 && bad_peers == len(ch.torrent.peers) {
+					// all peers are bad
+					return
+				}
+			case ALIVE:
+				alive_peers++
 				continue
-				// if len(ch.active_connections) == 0 {
-				// 	ch.logger.Println("Connected to all peers, attempting to start over")
-				// 	return
-				// }
-				// ch.logger.Printf("No more peers left to add")
-				// // no more peers left to add
-				// break
+			default:
+				ch.active_connections = append(ch.active_connections, &ch.torrent.peers[i])
+				ch.logger.Printf(" + %s", ch.torrent.peers[i].String())
+				go ch.active_connections[len(ch.active_connections)-1].run(ch.done_chan)
 			}
-			ch.active_connections = append(ch.active_connections, &ch.torrent.peers[ch.next_peer_index])
-			ch.logger.Printf(" + %s", ch.torrent.peers[ch.next_peer_index].String())
-			go ch.active_connections[len(ch.active_connections)-1].run(ch.done_chan)
-			ch.next_peer_index++
 		}
+		ch.logger.Printf("Bad: %d Alive: %d Total: %d\n", bad_peers, alive_peers, len(ch.torrent.peers))
 		ch.remove_connection(<-ch.done_chan) // block until someone disconnects
 	}
 }
