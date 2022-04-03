@@ -43,6 +43,9 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 
 		if length_prefix == 0 {
 			pr.logger.Println("Received KEEP ALIVE")
+			if !pr.peer.choked {
+				pr.peer.request_new_block()
+			}
 			continue
 		}
 
@@ -66,6 +69,7 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 		case UNCHOKE:
 			pr.logger.Println("Received UNCHOKE")
 			pr.peer.choked = false
+			go pr.peer.request_new_block()
 			continue
 		case INTERESTED:
 			pr.logger.Println("Received INTERESTED")
@@ -101,7 +105,6 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 				pr.logger.Println(err)
 				return
 			}
-
 		case PIECE:
 			pr.logger.Println("Received PIECE")
 
@@ -238,7 +241,6 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 			}
 
 			pr.peer.torrent.metadata_mx.Unlock()
-
 		default:
 			pr.logger.Println("Received bad message_id")
 		}

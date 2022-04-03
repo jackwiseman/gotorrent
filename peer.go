@@ -215,7 +215,7 @@ func (peer *Peer) perform_handshake() error {
 	return nil
 }
 
-// nominally we'd like to just disconnect from this peer if they don't provide a bitfield, since seeding will probably be implemented later
+// Read the bitfield, should be called directly after a handshake
 func (peer *Peer) get_bitfield() error {
 	length_prefix_buf := make([]byte, 4)
 	message_id_buf := make([]byte, 1)
@@ -260,7 +260,7 @@ func (peer *Peer) get_bitfield() error {
 }
 
 // Request queue_size blocks from peer, so that time is not lost between each received block and each new requested one
-func (peer *Peer) queue_blocks() {
+func (peer *Peer) queue_blocks(queue_size int) {
 	peer.send_interested()
 
 	for {
@@ -269,7 +269,6 @@ func (peer *Peer) queue_blocks() {
 		}
 	}
 	peer.requests = make([]byte, ((peer.torrent.get_num_blocks())+8)/8)
-	queue_size := 30
 
 	for i := 0; i < queue_size; i++ {
 		piece, offset := peer.get_new_block()
@@ -283,6 +282,7 @@ func (peer *Peer) queue_blocks() {
 	}
 }
 
+// Send a request block message to this peer asking for a random non-downloaded block
 func (peer *Peer) request_new_block() {
 	go peer.torrent.check_download_status()
 	piece, offset := peer.get_new_block()
@@ -299,7 +299,7 @@ func (peer *Peer) made_request(piece int, offset int) bool {
 	return (peer.requests[index/8]>>(7-(index%8)))&1 == 1
 }
 
-// return a random piece + offset pair corresponding to a non downloaded block
+// Return a random piece + offset pair corresponding to a non downloaded block
 // or -1, -1 in the case of all blocks already downloaded
 func (peer *Peer) get_new_block() (int, int) {
 	rand.Seed(time.Now().UnixNano())
@@ -318,6 +318,7 @@ func (peer *Peer) get_new_block() (int, int) {
 	}
 }
 
+// Return true if peer's bitfield indicates that they have the inputed piece
 func (peer *Peer) has_piece(piece_num int) bool {
 	return (peer.bitfield[(piece_num/int(8))]>>(7-(piece_num%8)))&1 == 1
 }
