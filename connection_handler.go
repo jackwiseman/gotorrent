@@ -29,9 +29,8 @@ func (torrent *Torrent) new_connection_handler() *Connection_Handler {
 	ch.torrent = torrent
 
 	ch.done_chan = make(chan *Peer)
-	// sometimes the block doesn't get fully read in one call here, TODO: investigate this behavior globally
 	ch.logger = log.New(torrent.log_file, "[Connection Handler] ", log.Ltime|log.Lshortfile)
-	//ch.logger.SetOutput(ioutil.Discard)
+	//	ch.logger.SetOutput(ioutil.Discard)
 
 	return &ch
 }
@@ -42,17 +41,26 @@ func (ch *Connection_Handler) run() {
 	for {
 		// ch.logger.Println(ch.String())
 		// ch.logger.Printf("Need to add %d new peers", ch.torrent.max_peers - len(ch.active_connections))
+		// attempt to fill up missing connections to reach max_peers
 		for i := 0; i < ch.torrent.max_peers-len(ch.active_connections); i++ {
+			// skip this peer if it's either bad or already connected
+			if ch.torrent.peers[ch.next_peer_index].status == BAD || ch.torrent.peers[ch.next_peer_index].status == ALIVE {
+				ch.next_peer_index++
+				continue
+			}
 			if ch.next_peer_index >= len(ch.torrent.peers)-1 {
-				if len(ch.active_connections) == 0 {
-					ch.logger.Println("Connected to all peers")
-					return
-				}
-				ch.logger.Printf("No more peers left to add")
-				// no more peers left to add
-				break
+				ch.next_peer_index = 0
+				continue
+				// if len(ch.active_connections) == 0 {
+				// 	ch.logger.Println("Connected to all peers, attempting to start over")
+				// 	return
+				// }
+				// ch.logger.Printf("No more peers left to add")
+				// // no more peers left to add
+				// break
 			}
 			ch.active_connections = append(ch.active_connections, &ch.torrent.peers[ch.next_peer_index])
+			ch.logger.Printf(" + %s", ch.torrent.peers[ch.next_peer_index].String())
 			go ch.active_connections[len(ch.active_connections)-1].run(ch.done_chan)
 			ch.next_peer_index++
 		}
@@ -62,7 +70,7 @@ func (ch *Connection_Handler) run() {
 
 // remove peer from the connection slice
 func (ch *Connection_Handler) remove_connection(peer *Peer) {
-	ch.logger.Println(peer.ip)
+	ch.logger.Printf(" - %s", peer.String())
 	if len(ch.active_connections) == 1 {
 		ch.active_connections = []*Peer{}
 	} else {

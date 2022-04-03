@@ -7,6 +7,7 @@ import (
 	"log"
 	"math/rand"
 	"net"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -58,33 +59,41 @@ func new_peer(ip string, port string, torrent *Torrent) *Peer {
 	return &peer
 }
 
+func (peer *Peer) String() string {
+	return peer.ip + " " + strconv.Itoa(peer.status)
+}
+
 func (peer *Peer) run(done_ch chan *Peer) {
-	peer.logger.Printf("Connecting")
+	defer func() { done_ch <- peer }()
+
+	peer.logger.Printf(" + %s", peer.String())
+
+	peer.status = ALIVE
 
 	err := peer.connect()
 	if err != nil {
 		peer.logger.Println("Connection error: " + err.Error())
-
 		peer.status = BAD
-		done_ch <- peer
 		return
 	}
-	err = peer.perform_handshake()
 
+	err = peer.perform_handshake()
 	if err != nil {
 		peer.logger.Println("Handshake error: " + err.Error())
-
 		peer.status = BAD
-		done_ch <- peer
 		return
 	}
 
 	err = peer.get_bitfield()
 	if err != nil {
 		peer.logger.Println("Bitfield error: " + err.Error())
-
 		peer.status = BAD
-		done_ch <- peer
+		return
+	}
+
+	// Drop this peer if we don't have metadata yet and they aren't equipped to send it
+	if !peer.supports_metadata_requests() && !peer.torrent.has_all_metadata() {
+		peer.disconnect()
 		return
 	}
 
@@ -93,10 +102,9 @@ func (peer *Peer) run(done_ch chan *Peer) {
 	wg.Add(2)
 	go peer.pr.run(&wg)
 	go peer.pw.run(&wg)
-
 	wg.Wait()
 
-	peer.disconnect(done_ch)
+	peer.disconnect()
 }
 
 func (peer *Peer) supports_metadata_requests() bool {
@@ -155,11 +163,10 @@ func (peer *Peer) request_block(piece_num int, offset int) {
 }
 
 // TODO: ensure read/write are closed
-func (peer *Peer) disconnect(done_ch chan *Peer) {
+func (peer *Peer) disconnect() {
 	if peer.conn != nil { // need to look into this, also keeping it open
 		peer.conn.Close()
 	}
-	done_ch <- peer
 }
 
 func (peer *Peer) perform_handshake() error {

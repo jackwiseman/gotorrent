@@ -61,8 +61,8 @@ func (pw *Peer_Writer) stop() {
 }
 
 // request specified metadata piece
-func (pw *Peer_Writer) send_metadata_request(piece_num int) {
-	payload := encode_metadata_request(piece_num)
+func (pw *Peer_Writer) send_metadata_request() {
+	payload := encode_metadata_request(pw.peer.torrent.get_rand_metadata_piece())
 	// marshall will ensure the length_prefix is set, we don't need to specify it here
 	pw.write_extended(Extended_Message{0, 20, uint8(pw.peer.extensions["ut_metadata"]), []byte(payload)})
 }
@@ -80,7 +80,7 @@ func (pw *Peer_Writer) metadata_request_scheduler() {
 		} else {
 			if pw.peer.supports_metadata_requests() {
 				pw.logger.Println("Requesting metadata")
-				pw.send_metadata_request(pw.peer.torrent.get_rand_metadata_piece())
+				pw.send_metadata_request()
 			}
 		}
 	}
@@ -99,12 +99,15 @@ func (pw *Peer_Writer) run(wg *sync.WaitGroup) {
 
 	go pw.keep_alive_scheduler()
 
+	pw.logger.Println(pw.peer.torrent.has_all_metadata())
 	if !pw.peer.torrent.has_all_metadata() {
-		go pw.metadata_request_scheduler()
+		//go pw.metadata_request_scheduler()
+		go pw.send_metadata_request()
 	}
 
 	for {
 		msg := <-pw.message_ch
+		pw.logger.Println(msg)
 
 		if int(msg[4]) == STOP {
 			return
