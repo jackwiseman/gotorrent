@@ -71,10 +71,11 @@ func (pw *Peer_Writer) send_metadata_request(piece_num int) {
 // todo make sure mutexes are used when checking pieces
 func (pw *Peer_Writer) metadata_request_scheduler() {
 	pw.metadata_request_ticker = time.NewTicker(15 * time.Second)
-	for _ = range pw.metadata_request_ticker.C {
+	for range pw.metadata_request_ticker.C {
 		if pw.peer.torrent.has_all_metadata() {
 			pw.metadata_request_ticker.Stop()
-			go pw.peer.queue_blocks()
+			go pw.peer.request_new_block()
+			// go pw.peer.queue_blocks()
 			return
 		} else {
 			if pw.peer.supports_metadata_requests() {
@@ -87,7 +88,7 @@ func (pw *Peer_Writer) metadata_request_scheduler() {
 
 func (pw *Peer_Writer) keep_alive_scheduler() {
 	pw.keep_alive_ticker = time.NewTicker(1 * time.Minute)
-	for _ = range pw.keep_alive_ticker.C {
+	for range pw.keep_alive_ticker.C {
 		pw.conn.Write([]byte{0, 0, 0, 0})
 	}
 	pw.keep_alive_ticker.Stop()

@@ -26,7 +26,6 @@ type Peer struct {
 	pw *Peer_Writer
 	pr *Peer_Reader
 
-	// Should switch to this from piece queue, will be better on memory
 	requests []byte
 	// responses []byte
 
@@ -240,9 +239,19 @@ func (peer *Peer) get_bitfield() error {
 	}
 
 	bitfield_buf := make([]byte, length_prefix-1)
-	_, err = peer.conn.Read(bitfield_buf)
-	if err != nil {
-		return err
+	total_read := 0
+	for total_read < length_prefix-1 {
+		temp_buf := make([]byte, len(bitfield_buf)-total_read)
+		n, err := peer.conn.Read(temp_buf)
+		if err != nil {
+			return err
+		}
+
+		bitfield_buf_remainder := bitfield_buf[total_read+n:]
+		bitfield_buf = append(bitfield_buf[0:total_read], temp_buf[:n]...)
+		bitfield_buf = append(bitfield_buf, bitfield_buf_remainder...)
+		peer.logger.Println(n)
+		total_read += n
 	}
 
 	peer.bitfield = bitfield_buf
@@ -307,8 +316,6 @@ func (peer *Peer) get_new_block() (int, int) {
 			return test_piece, test_offset
 		}
 	}
-
-	return -1, -1
 }
 
 func (peer *Peer) has_piece(piece_num int) bool {

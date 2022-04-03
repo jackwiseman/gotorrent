@@ -124,9 +124,14 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 				return
 			}
 
+			index := int(binary.BigEndian.Uint32(index_buf))
+			begin := int(binary.BigEndian.Uint32(begin_buf))
+
+			pr.logger.Printf("Index: %d, Begin: %d", index, begin)
+
 			block_buf := make([]byte, length_prefix-9)
 			total_read := 0
-			for total_read < length_prefix-9 { // sometimes the block doesn't get fully read in one call here, TODO: investigate this behavior globally
+			for total_read < length_prefix-9 {
 				temp_buf := make([]byte, len(block_buf)-total_read)
 				n, err := pr.conn.Read(temp_buf)
 				if err != nil {
@@ -140,10 +145,7 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 				total_read += n
 			}
 
-			index := int(binary.BigEndian.Uint32(index_buf))
-			begin := int(binary.BigEndian.Uint32(begin_buf))
-
-			pr.logger.Printf("Index: %d, Begin: %d", index, begin)
+			pr.logger.Printf("Extended message info - Got %d bytes, expecting %d\n", total_read, len(block_buf))
 
 			pr.peer.torrent.set_block(index, begin, block_buf)
 
@@ -196,6 +198,8 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 				pr.logger.Println(n)
 				total_read += n
 			}
+
+			pr.logger.Printf("Extended message info - Got %d bytes, expecting %d\n", total_read, len(payload_buf))
 
 			bencode_end := bytes.Index(payload_buf, []byte("ee")) + 2
 			bencode := payload_buf[0:bencode_end]

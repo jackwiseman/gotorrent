@@ -30,7 +30,7 @@ func (torrent *Torrent) new_connection_handler() *Connection_Handler {
 	ch.torrent = torrent
 
 	ch.done_chan = make(chan *Peer)
-
+	// sometimes the block doesn't get fully read in one call here, TODO: investigate this behavior globally
 	ch.logger = log.New(torrent.log_file, "[Connection Handler] ", log.Ltime|log.Lshortfile)
 	ch.logger.SetOutput(ioutil.Discard)
 
