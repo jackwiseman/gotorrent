@@ -93,7 +93,7 @@ func (torrent *Torrent) parse_magnet_link() {
 	}
 }
 
-func (torrent Torrent) print_info() {
+func (torrent *Torrent) print_info() {
 	fmt.Println("Name: " + torrent.display_name)
 	fmt.Println("Magnet: " + torrent.magnet_link)
 	fmt.Println("Trackers:")
@@ -146,7 +146,6 @@ func (torrent *Torrent) find_peers() {
 			if err != nil {
 				return
 			}
-
 			tracker.disconnect()
 		}(&wg, torrent.trackers[i])
 	}
