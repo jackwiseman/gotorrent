@@ -63,6 +63,7 @@ func (ch *Connection_Handler) run() {
 			}
 		}
 		ch.logger.Printf("Bad: %d Alive: %d Total: %d\n", bad_peers, alive_peers, len(ch.torrent.peers))
+		ch.logger.Println("------------------------")
 		ch.remove_connection(<-ch.done_chan) // block until someone disconnects
 	}
 }

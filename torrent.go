@@ -289,7 +289,71 @@ func (torrent *Torrent) has_all_data() bool {
 }
 
 func (torrent *Torrent) build_file() {
-	file, _ := os.Create("downloads/" + torrent.metadata.Name)
+	if len(torrent.metadata.Files) > 1 {
+		// Create new directory
+		path := "downloads/" + torrent.display_name + "/"
+		err := os.MkdirAll("downloads/"+torrent.display_name, 0770)
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		var bytes_written int
+		for i := 0; i < len(torrent.metadata.Files); i++ {
+			torrent.create_file(bytes_written, torrent.metadata.Files[i].Length, path, torrent.metadata.Files[i].Path[0])
+			bytes_written += torrent.metadata.Files[i].Length
+		}
+	} else {
+		// Single files
+		file, _ := os.Create("downloads/" + torrent.metadata.Name)
+		for i := 0; i < len(torrent.pieces); i++ {
+			for j := 0; j < len(torrent.pieces[i].blocks); j++ {
+				_, _ = file.Write(torrent.pieces[i].blocks[j].data)
+			}
+		}
+	}
+}
+
+// Writes one file to given directory (util function for build_file)
+func (torrent *Torrent) create_file(offset int, file_size int, path string, name string) {
+	file, _ := os.Create(path + name)
+
+	if file_size < BLOCK_LEN {
+	}
+
+	// write data spilling into front block, ie block 1 here [  xx] [xxxx] [xx  ]
+
+	start_piece := offset / BLOCK_LEN / torrent.get_num_blocks_in_piece()
+	start_block := offset / BLOCK_LEN % torrent.get_num_blocks_in_piece()
+
+	bytes_written, _ := file.Write(torrent.pieces[start_piece].blocks[start_block].data[offset%BLOCK_LEN:])
+
+	// finish this piece for easy iteration -- this assumes that there is > BLOCK_LEN * torrent.get_num_blocks_in_piece() data left to write
+	for i := start_block + 1; i < torrent.get_num_blocks_in_piece(); i++ {
+		b, err := file.Write(torrent.pieces[start_piece].blocks[i].data)
+		if err != nil {
+		}
+		bytes_written += b
+	}
+	start_piece++
+
+	blocks_to_write := (file_size - bytes_written) / BLOCK_LEN
+
+	for i := start_piece; i < start_piece+(blocks_to_write/torrent.get_num_blocks_in_piece()); i++ {
+		for j := 0; j < torrent.get_num_blocks_in_piece(); j++ {
+			if i == start_piece+(blocks_to_write/torrent.get_num_blocks_in_piece())-1 && j == (blocks_to_write%torrent.get_num_blocks_in_piece()) {
+				break
+			}
+			b, _ := file.Write(torrent.pieces[i].blocks[j].data)
+			bytes_written += b
+		}
+
+	}
+
+	// write data spilling into back block
+	last_piece := (file_size + offset) / BLOCK_LEN / torrent.get_num_blocks_in_piece()
+	last_block := (file_size + offset) / BLOCK_LEN % torrent.get_num_blocks_in_piece()
+	_, _ = file.Write(torrent.pieces[last_piece].blocks[last_block].data[:file_size%BLOCK_LEN])
+
 	for i := 0; i < len(torrent.pieces); i++ {
 		for j := 0; j < len(torrent.pieces[i].blocks); j++ {
 			_, _ = file.Write(torrent.pieces[i].blocks[j].data)
