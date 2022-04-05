@@ -120,12 +120,12 @@ func (torrent *Torrent) print_info() {
 func (torrent *Torrent) find_peers() {
 	var wg sync.WaitGroup
 
+	fmt.Println("Contacting trackers...")
 	// TODO: fix bad trackers?
 	for i := 0; i < len(torrent.trackers); i++ {
 		wg.Add(1)
 		go func(wg *sync.WaitGroup, tracker Tracker) {
 			defer wg.Done()
-			fmt.Println("Connecting to " + tracker.link)
 
 			err := tracker.connect()
 			if err != nil {
@@ -151,10 +151,8 @@ func (torrent *Torrent) find_peers() {
 	}
 	wg.Wait()
 
-	// fmt.Printf("Found %d peers\n", len(torrent.peers))
-	// fmt.Println("Trimming...")
 	torrent.remove_duplicate_peers()
-	// fmt.Printf("Finished trim with %d peers left\n", len(torrent.peers))
+	fmt.Printf("%d peers in swarm\n", len(torrent.peers))
 }
 
 // remove all instances of repeating peer ip addresses from torrent.peers
@@ -202,12 +200,7 @@ func (torrent *Torrent) parse_metadata_file() error {
 		torrent.pieces[i].blocks = make([]Block, torrent.metadata.Piece_len/(BLOCK_LEN))
 	}
 	torrent.pieces[len(torrent.pieces)-1].blocks = make([]Block, int(math.Ceil(float64(torrent.metadata.Length-(torrent.metadata.Piece_len*(len(torrent.pieces)-1)))/float64(BLOCK_LEN))))
-	//	fmt.Println(torrent.pieces)
 	torrent.obtained_blocks = make([]byte, int(math.Ceil(float64(torrent.get_num_blocks())/float64(8))))
-	//fmt.Println("------")
-	//fmt.Println(torrent.get_num_blocks())
-	// fmt.Println(torrent.obtained_blocks)
-	//fmt.Println("------")
 
 	return nil
 }
@@ -221,16 +214,6 @@ func (torrent *Torrent) start_download() {
 	torrent.conn_handler.run()
 
 	torrent.print_info()
-
-	/*	var wg sync.WaitGroup
-
-
-			for i := 0; i < len(torrent.peers); i++ {
-				wg.Add(1)
-				go torrent.peers[i].run(torrent, &wg)
-		}
-
-		wg.Wait()*/
 }
 
 func (torrent *Torrent) set_block(piece_index int, offset int, data []byte) {
@@ -244,11 +227,8 @@ func (torrent *Torrent) set_block(piece_index int, offset int, data []byte) {
 	torrent.pieces[piece_index].blocks[offset/BLOCK_LEN].data = data
 	block_index := (piece_index*torrent.get_num_blocks_in_piece() + (offset / BLOCK_LEN))
 	torrent.obtained_blocks[block_index/8] = torrent.obtained_blocks[block_index/8] | (1 << (7 - (block_index % 8)))
-	//	fmt.Printf("\nPiece (%d, %d) recieved\n", piece_index, offset/BLOCK_LEN)
 	torrent.num_pieces++
-	fmt.Printf("Block %d/%d received (%d, %d)\n", torrent.num_pieces, torrent.get_num_blocks(), piece_index, offset/BLOCK_LEN)
-
-	//	fmt.Println(torrent.obtained_blocks)
+	fmt.Printf("%g%% - %d/%d blocks received\n", math.Round((float64(torrent.num_pieces)/float64(torrent.get_num_blocks())*10000))/100, torrent.num_pieces, torrent.get_num_blocks())
 }
 
 func (torrent *Torrent) has_block(piece_index int, offset int) bool {
@@ -274,7 +254,6 @@ func (torrent *Torrent) check_download_status() {
 }
 
 func (torrent *Torrent) has_all_data() bool {
-	//fmt.Println(torrent.obtained_blocks)
 	for i := 0; i < torrent.get_num_blocks()/8; i++ {
 		if int(torrent.obtained_blocks[i]) != 255 {
 			return false
