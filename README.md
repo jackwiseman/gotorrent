@@ -14,9 +14,12 @@
 ### Motivation
 With BitTorrent remaining the single largest file-sharing protocol since its initial release in 2001, I thought it might be interesting to explore exactly how the protocol works. In order to implement thus far, I've utilized the (somewhat outdated) [WikiTheory Documentation](https://wiki.theory.org/BitTorrentSpecification) along with the BitTorrent-published [BEPs](http://www.bittorrent.org/beps/bep_0000.html) (**B**itTorrent **E**nhancement **P**roposals). Most of what I have been able to implement thus far is leech-heavy, I don't anticipate writing a client meant to be left open for long periods of time, but mainly focused on downloading the contents of torrents pointed to by magnet links. Besides learning about the protocol itself, I thought it would be interresting to build upon what I learned for my [EncryptedChat](http://www.github.com/jackwiseman/encryptedchat) project and work with a network protocol that is actually utilized today.
 
-### TODO
+### Stable Release TODO
 - [ ] Speed up downloads by implementing an outstanding 'queue' of pieces
-- [ ] Check piece hashes **project should not be used until this is implemented**
+- [ ] Check piece hashes
 - [ ] Investigate unexpected EOF on peers after a successful handshake
 - [ ] Report download speeds
-
+- [ ] Improve [end game](https://wiki.theory.org/BitTorrentSpecification#End_Game) algorithm
+- [ ] Ability to add magnet links as commandline argument
+- [ ] Write to file during download to save memory
+- [ ] Resume unfinished downloads

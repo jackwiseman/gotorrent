@@ -35,6 +35,9 @@ type Torrent struct {
 	num_pieces_mx   sync.Mutex
 	num_pieces      int
 
+	is_downloaded bool
+	downloaded_mx sync.Mutex
+
 	log_file *os.File
 
 	conn_handler *Connection_Handler
@@ -248,9 +251,12 @@ func (torrent *Torrent) get_num_blocks_in_piece() int {
 }
 
 func (torrent *Torrent) check_download_status() {
-	if torrent.has_all_data() {
+	torrent.downloaded_mx.Lock()
+	if torrent.has_all_data() && torrent.is_downloaded == false {
 		torrent.build_file()
+		torrent.is_downloaded = true
 	}
+	torrent.downloaded_mx.Unlock()
 }
 
 func (torrent *Torrent) has_all_data() bool {
@@ -307,7 +313,7 @@ func (torrent *Torrent) create_file(offset int, file_size int, path string, name
 	bytes_written, _ := file.Write(torrent.pieces[start_piece].blocks[start_block].data[offset%BLOCK_LEN:])
 
 	// finish this piece for easy iteration -- this assumes that there is > BLOCK_LEN * torrent.get_num_blocks_in_piece() data left to write
-	for i := start_block + 1; i < torrent.get_num_blocks_in_piece(); i++ {
+	for i := start_block + 1; i < len(torrent.pieces[start_piece].blocks); i++ {
 		b, err := file.Write(torrent.pieces[start_piece].blocks[i].data)
 		if err != nil {
 		}
