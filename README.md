@@ -1,7 +1,7 @@
 <div align="center">
 	<h1>GoTorrent</h1>
 	<p>A CLI Bittorrent Client written in GoLang</p>
-	<p>Note: This project is currently *heavily* under development and not intended to be used -- yet</p>
+	<p>Note: This project is currently under development and issues should be expected</p>
 </div>
 
 
@@ -9,8 +9,6 @@
  - Magnet link support (.torrent files are not currently planned)
  - Scrapes torrent info, displaying # of seeders/leechers
  - Fetches metadata from magnet links' embedded trackers
-
-### Planned Features
  - Single file downloads
  - Multi-file downloads
 
