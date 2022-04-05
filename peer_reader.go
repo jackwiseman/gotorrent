@@ -30,8 +30,6 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 		pr.peer.pw.stop()
 		wg.Done()
 	}()
-	// defer pr.peer.pw.stop()
-	// defer wg.Done()
 
 	for {
 		// disconnect if we don't receive a KEEP ALIVE (or any message) for 2 minutes
@@ -221,8 +219,6 @@ func (pr *Peer_Reader) run(wg *sync.WaitGroup) {
 			}
 
 			metadata_piece := payload_buf[bencode_end:]
-			//fmt.Println(string(bencode))
-			//fmt.Println(string(metadata_piece))
 
 			// ensure metadata is built once and only once
 			pr.peer.torrent.metadata_mx.Lock()
