@@ -41,6 +41,7 @@ type Torrent struct {
 	log_file *os.File
 
 	conn_handler *Connection_Handler
+	progress_bar Bar
 }
 
 // for simplicity, only magnet links will be supportd for no
@@ -205,6 +206,7 @@ func (torrent *Torrent) parse_metadata_file() error {
 	torrent.pieces[len(torrent.pieces)-1].blocks = make([]Block, int(math.Ceil(float64(torrent.metadata.Length-(torrent.metadata.Piece_len*(len(torrent.pieces)-1)))/float64(BLOCK_LEN))))
 	torrent.obtained_blocks = make([]byte, int(math.Ceil(float64(torrent.get_num_blocks())/float64(8))))
 
+	torrent.progress_bar.new_option(0, int64(torrent.get_num_blocks()))
 	return nil
 }
 
@@ -214,6 +216,7 @@ func (torrent *Torrent) start_download() {
 	torrent.find_peers()
 
 	// eventually this will be backgrounded but ok to just connect for now
+
 	torrent.conn_handler.run()
 
 	torrent.print_info()
@@ -231,7 +234,8 @@ func (torrent *Torrent) set_block(piece_index int, offset int, data []byte) {
 	block_index := (piece_index*torrent.get_num_blocks_in_piece() + (offset / BLOCK_LEN))
 	torrent.obtained_blocks[block_index/8] = torrent.obtained_blocks[block_index/8] | (1 << (7 - (block_index % 8)))
 	torrent.num_pieces++
-	fmt.Printf("%g%% - %d/%d blocks received\n", math.Round((float64(torrent.num_pieces)/float64(torrent.get_num_blocks())*10000))/100, torrent.num_pieces, torrent.get_num_blocks())
+	torrent.progress_bar.play(int64(torrent.num_pieces))
+	//	fmt.Printf("%g%% - %d/%d blocks received\n", math.Round((float64(torrent.num_pieces)/float64(torrent.get_num_blocks())*10000))/100, torrent.num_pieces, torrent.get_num_blocks())
 }
 
 func (torrent *Torrent) has_block(piece_index int, offset int) bool {
@@ -274,6 +278,7 @@ func (torrent *Torrent) has_all_data() bool {
 }
 
 func (torrent *Torrent) build_file() {
+	torrent.progress_bar.finish()
 	if len(torrent.metadata.Files) > 1 {
 		// Create new directory
 		path := "downloads/" + torrent.display_name + "/"
