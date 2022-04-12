@@ -6,7 +6,10 @@ import (
 
 func main() {
 	// flush current debug log
-	os.Remove("debug.log")
+	err := os.Remove("debug.log")
+	if err != nil {
+		panic(err)
+	}
 
 	defaultConns := 50
 

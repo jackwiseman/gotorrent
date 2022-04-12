@@ -88,7 +88,10 @@ func encodeMetadataRequest(pieceNumber int) string {
 	var data MetadataRequest
 	data.MsgType = 0
 	data.Piece = pieceNumber
-	bencode.Marshal(&b, data)
+	err := bencode.Marshal(&b, data)
+	if err != nil {
+		panic(err)
+	}
 	//fmt.Println(b.String())
 	return b.String()
 }
@@ -96,14 +99,20 @@ func encodeMetadataRequest(pieceNumber int) string {
 func decodeMetadataRequest(payload []byte) MetadataResponse {
 	var result = MetadataResponse{0, 0, 0}
 	reader := bytes.NewReader([]byte(payload))
-	bencode.Unmarshal(reader, &result)
+	err := bencode.Unmarshal(reader, &result)
+	if err != nil {
+		panic(err)
+	}
 	return result
 }
 
 func decodeHandshake(payload []byte) *ExtendedHandshakePayload {
 	var result = ExtendedHandshakePayload{nil, "v", 0, 0, 0}
 	reader := bytes.NewReader([]byte(payload))
-	bencode.Unmarshal(reader, &result)
+	err := bencode.Unmarshal(reader, &result)
+	if err != nil {
+		panic(err)
+	}
 	return &result
 }
 

@@ -161,7 +161,10 @@ func (peer *Peer) requestBlock(pieceNum int, offset int) {
 // TODO: ensure read/write are closed
 func (peer *Peer) disconnect() {
 	if peer.conn != nil { // need to look into this, also keeping it open
-		peer.conn.Close()
+		err := peer.conn.Close()
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 

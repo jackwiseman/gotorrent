@@ -33,7 +33,10 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 
 	for {
 		// disconnect if we don't receive a KEEP ALIVE (or any message) for 2 minutes
-		pr.conn.SetReadDeadline(time.Now().Add(time.Minute * time.Duration(2)))
+		err := pr.conn.SetReadDeadline(time.Now().Add(time.Minute * time.Duration(2)))
+		if err != nil {
+			panic(err)
+		}
 
 		lengthPrefixBuf := make([]byte, 4)
 		b, err := pr.conn.Read(lengthPrefixBuf)

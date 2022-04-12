@@ -137,7 +137,7 @@ func (torrent *Torrent) findPeers() {
 				return
 			}
 
-			tracker.setConnectionID()
+			err = tracker.setConnectionID()
 			if err != nil {
 				return
 			}
@@ -151,7 +151,10 @@ func (torrent *Torrent) findPeers() {
 			if err != nil {
 				return
 			}
-			tracker.disconnect()
+			err = tracker.disconnect()
+			if err != nil {
+				panic(err)
+			}
 		}(&wg, torrent.trackers[i])
 	}
 	wg.Wait()

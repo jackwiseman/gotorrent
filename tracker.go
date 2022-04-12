@@ -33,8 +33,12 @@ func (tracker *Tracker) connect() error {
 	return nil
 }
 
-func (tracker *Tracker) disconnect() {
-	tracker.conn.Close()
+func (tracker *Tracker) disconnect() error {
+	err := tracker.conn.Close()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // the first step in getting peers from the tracker is getting a connection_id, which is valid for 2 minutes
@@ -57,7 +61,10 @@ func (tracker *Tracker) setConnectionID() error {
 		binary.BigEndian.PutUint32(packet[12:], transactionID)
 
 		// Set a write deadline of 15 seconds and connect
-		tracker.conn.SetWriteDeadline(time.Now().Add(tracker.timeout))
+		err = tracker.conn.SetWriteDeadline(time.Now().Add(tracker.timeout))
+		if err != nil {
+			panic(err)
+		}
 		bytesWritten, err := tracker.conn.Write(packet)
 		if err != nil {
 			continue
@@ -67,7 +74,10 @@ func (tracker *Tracker) setConnectionID() error {
 		}
 
 		// Per BitTorrent.org specificiations, "If a response is not recieved after 15 * 2 ^ n seconds, client should retransmit, where n increases to 8 from 0
-		tracker.conn.SetReadDeadline(time.Now().Add(time.Second * time.Duration(int(15*math.Pow(2, float64(i))))))
+		err = tracker.conn.SetReadDeadline(time.Now().Add(time.Second * time.Duration(int(15*math.Pow(2, float64(i))))))
+		if err != nil {
+			panic(err)
+		}
 
 		// Expecting a 16 byte response where
 		// Offset	Name		Value
@@ -146,7 +156,10 @@ func (tracker *Tracker) announce(torrent *Torrent, numWant int) (int, error) {
 		}
 
 		buf := make([]byte, 20+(6*numWant))
-		tracker.conn.SetReadDeadline(time.Now().Add(time.Second * time.Duration(int(15*math.Pow(2, float64(i)))))) // BEP 15 - If a response is not received after 15 * 2 ^ n seconds, the client should retransmit the request, where n starts at 0 and is increased up to 8 (3840 seconds) after every retransmission
+		err = tracker.conn.SetReadDeadline(time.Now().Add(time.Second * time.Duration(int(15*math.Pow(2, float64(i)))))) // BEP 15 - If a response is not received after 15 * 2 ^ n seconds, the client should retransmit the request, where n starts at 0 and is increased up to 8 (3840 seconds) after every retransmission
+		if err != nil {
+			panic(err)
+		}
 
 		bytesRead, err := tracker.conn.Read(buf)
 		if bytesRead < 20 || err != nil {

@@ -89,7 +89,10 @@ func (pw *PeerWriter) sendMetadataRequest() {
 func (pw *PeerWriter) keepAliveScheduler() {
 	pw.keepAliveTicker = time.NewTicker(1 * time.Minute)
 	for range pw.keepAliveTicker.C {
-		pw.conn.Write([]byte{0, 0, 0, 0})
+		_, err := pw.conn.Write([]byte{0, 0, 0, 0})
+		if err != nil {
+			panic(err)
+		}
 	}
 	pw.keepAliveTicker.Stop()
 }
