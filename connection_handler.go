@@ -2,19 +2,12 @@ package main
 
 import (
 	"log"
-	"sync"
-	"time"
 )
 
+// ConnectionHandler runs once we have a list of non-duplicate peers, connecting to those peers and managing their connections
 type ConnectionHandler struct {
 	// contains all peers which are either active or connecting
 	activeConns []*Peer
-	// index of where to grab next peer from torrent's master list of tracker-discovered peers
-	nextPeerIndex int
-	// ensures that peers are able to concurrently remove themselves from the connection handler
-	editConnectedPeers sync.Mutex
-	// check the connections every 'ticker seconds
-	ticker *time.Ticker
 	// associated torrent
 	torrent *Torrent
 	// channel for peers to notify connection handler that they've disconnected, allows us to not just run in a ticker

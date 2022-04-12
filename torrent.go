@@ -14,6 +14,7 @@ import (
 	bencode "github.com/jackpal/bencode-go"
 )
 
+// Torrent stores all data about a torrent generated from a magnet link
 type Torrent struct {
 	magLink  string
 	name     string
@@ -136,7 +137,7 @@ func (torrent *Torrent) findPeers() {
 				return
 			}
 
-			tracker.setConnectionId()
+			tracker.setConnectionID()
 			if err != nil {
 				return
 			}
@@ -168,7 +169,6 @@ func (torrent *Torrent) removeDuplicatePeers() {
 		if !seen[torrent.peers[i].ip] {
 			seen[torrent.peers[i].ip] = true
 			trimmed = append(trimmed, torrent.peers[i])
-		} else {
 		}
 	}
 	torrent.peers = trimmed
@@ -255,7 +255,7 @@ func (torrent *Torrent) getNumBlocksInPiece() int {
 
 func (torrent *Torrent) checkDownloadStatus() {
 	torrent.downloadedMx.Lock()
-	if torrent.hasAllData() && torrent.isDownloaded == false {
+	if torrent.hasAllData() && !torrent.isDownloaded {
 		torrent.buildFile()
 		torrent.isDownloaded = true
 	}
@@ -306,9 +306,6 @@ func (torrent *Torrent) buildFile() {
 func (torrent *Torrent) createFile(offset int, fileSize int, path string, name string) {
 	file, _ := os.Create(path + name)
 
-	if fileSize < BlockLen {
-	}
-
 	// write data spilling into front block, ie block 1 here [  xx] [xxxx] [xx  ]
 
 	startPiece := offset / BlockLen / torrent.getNumBlocksInPiece()
@@ -320,6 +317,7 @@ func (torrent *Torrent) createFile(offset int, fileSize int, path string, name s
 	for i := startBlock + 1; i < len(torrent.pieces[startPiece].blocks); i++ {
 		b, err := file.Write(torrent.pieces[startPiece].blocks[i].data)
 		if err != nil {
+			panic(err)
 		}
 		bytesWritten += b
 	}

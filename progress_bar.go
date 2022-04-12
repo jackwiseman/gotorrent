@@ -4,6 +4,7 @@ import "fmt"
 
 // Shamelessly stolen from https://www.pixelstech.net/article/1596946473-A-simple-example-on-implementing-progress-bar-in-GoLang
 
+// Bar shows the percentage of the overall torrent that has been downloaded
 type Bar struct {
 	percent int64  // progress percentage
 	cur     int64  // current progress

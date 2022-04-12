@@ -12,6 +12,7 @@ import (
 	"time"
 )
 
+// Identifiers for peer status to denote whether we should attempt to connect to them again or not
 const (
 	Bad     = -1 // could not connect at all
 	Unknown = 0  // have not attempted connected yet
@@ -19,6 +20,7 @@ const (
 	Alive   = 2  // currently connected
 )
 
+// Peer is a connection that we read/write to to download files from, discovered through the Tracker
 type Peer struct {
 	ip           string
 	port         string
@@ -34,9 +36,6 @@ type Peer struct {
 	// wrapped io.Reader/io.Writer interfaces
 	pw *PeerWriter
 	pr *PeerReader
-
-	requests []byte
-	// responses []byte
 
 	logger *log.Logger
 }
@@ -112,10 +111,7 @@ func (peer *Peer) supportsMetadataRequests() bool {
 		return false
 	}
 	_, ok := peer.extensions["ut_metadata"]
-	if !ok {
-		return false
-	}
-	return true
+	return ok
 }
 
 // Connect to peer via TCP and create a peer_reader over connection
@@ -134,12 +130,12 @@ func (peer *Peer) connect() error {
 }
 
 // Sends an INTERESTED message about the given torrent so that we can be unchoked
-func (peer *Peer) sendInterested() {
+/*func (peer *Peer) sendInterested() {
 	if peer.pw == nil {
 		return
 	}
 	peer.pw.write(Message{1, Interested, nil})
-}
+}*/
 
 // send a request message to peer asking for specified block
 func (peer *Peer) requestBlock(pieceNum int, offset int) {
@@ -171,20 +167,20 @@ func (peer *Peer) disconnect() {
 
 func (peer *Peer) performHandshake() error {
 	if peer.conn == nil {
-		return errors.New("Error: peer's connection is nil")
+		return errors.New("peer's connection is nil")
 	}
 
 	outgoingHandshake := getHandshakeMessage(peer.torrent)
 	_, err := peer.conn.Write(outgoingHandshake)
 	if err != nil {
-		return errors.New("Error: unable to write to peer")
+		return errors.New("unable to write to peer")
 	}
 
 	// Read from peer
 	pstrlenBuf := make([]byte, 1)
 	_, err = peer.conn.Read(pstrlenBuf)
 	if err != nil {
-		return errors.New("Error: could not read from peer")
+		return errors.New("could not read from peer")
 	}
 
 	pstrlen := int(pstrlenBuf[0])
@@ -192,7 +188,7 @@ func (peer *Peer) performHandshake() error {
 	buf := make([]byte, 48+pstrlen)
 	_, err = peer.conn.Read(buf)
 	if err != nil {
-		return errors.New("Error: could not read from peer")
+		return errors.New("could not read from peer")
 	}
 
 	// TODO: confirm that peerid is the same as supplied on tracker
@@ -204,7 +200,7 @@ func (peer *Peer) performHandshake() error {
 
 		bytesWritten, err := peer.conn.Write(outgoingExtendedHandshake)
 		if err != nil || bytesWritten < len(outgoingExtendedHandshake) {
-			return errors.New("Error: unable to write to peer in extended handshake")
+			return errors.New("unable to write to peer in extended handshake")
 		}
 
 		lengthPrefixBuf := make([]byte, 4)
@@ -238,24 +234,24 @@ func (peer *Peer) performHandshake() error {
 // Read the bitfield, should be called directly after a handshake
 func (peer *Peer) getBitfield() error {
 	lengthPrefixBuf := make([]byte, 4)
-	messageIdBuf := make([]byte, 1)
+	messageIDBuf := make([]byte, 1)
 
 	_, err := peer.conn.Read(lengthPrefixBuf)
 	if err != nil {
 		return err
 	}
 
-	_, err = peer.conn.Read(messageIdBuf)
+	_, err = peer.conn.Read(messageIDBuf)
 	if err != nil {
 		return err
 	}
 
 	lengthPrefix := int(binary.BigEndian.Uint32(lengthPrefixBuf[0:]))
-	messageId := int(messageIdBuf[0])
+	messageID := int(messageIDBuf[0])
 
-	if messageId != Bitfield {
-		peer.logger.Printf("Unexpected BITFIELD: length: %d, id: %d", lengthPrefix, messageId)
-		return errors.New("Got unexpected message from peer, expecting BITFIELD")
+	if messageID != Bitfield {
+		peer.logger.Printf("Unexpected BITFIELD: length: %d, id: %d", lengthPrefix, messageID)
+		return errors.New("got unexpected message from peer, expecting BITFIELD")
 	}
 
 	bitfieldBuf := make([]byte, lengthPrefix-1)
@@ -280,7 +276,7 @@ func (peer *Peer) getBitfield() error {
 }
 
 // Request queue_size blocks from peer, so that time is not lost between each received block and each new requested one
-func (peer *Peer) queueBlocks(queueSize int) {
+/*func (peer *Peer) queueBlocks(queueSize int) {
 	peer.sendInterested()
 
 	for {
@@ -288,7 +284,6 @@ func (peer *Peer) queueBlocks(queueSize int) {
 			break
 		}
 	}
-	peer.requests = make([]byte, ((peer.torrent.getNumBlocks())+8)/8)
 
 	for i := 0; i < queueSize; i++ {
 		piece, offset := peer.getNewBlock()
@@ -296,11 +291,9 @@ func (peer *Peer) queueBlocks(queueSize int) {
 		if piece == -1 {
 			continue
 		}
-		index := (piece * peer.torrent.getNumBlocksInPiece()) + offset
-		peer.requests[index/8] = peer.requests[index/8] | (1 << (7 - (index % 8)))
 		peer.requestBlock(piece, offset)
 	}
-}
+}*/
 
 // Send a request block message to this peer asking for a random non-downloaded block
 func (peer *Peer) requestNewBlock() {
@@ -314,12 +307,6 @@ func (peer *Peer) requestNewBlock() {
 	}
 
 	peer.requestBlock(piece, offset)
-}
-
-// Return true if we have requested this block from this peer
-func (peer *Peer) madeRequest(piece int, offset int) bool {
-	index := (piece * peer.torrent.getNumBlocksInPiece()) + offset
-	return (peer.requests[index/8]>>(7-(index%8)))&1 == 1
 }
 
 // Return a random piece + offset pair corresponding to a non downloaded block

@@ -1,8 +1,9 @@
 package main
 
-const BlockLen = 16 * 1024 // 16 KiB default block len
+// BlockLen is the default 16KiB block length
+const BlockLen = 16 * 1024
 
+// Block is the lowest form of data, what we receive from a peer in a piece message, if we request the entire block
 type Block struct {
-	data   []byte
-	length int
+	data []byte
 }

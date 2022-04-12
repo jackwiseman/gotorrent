@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// this structure likely should be changed, kind of redundant
+// PeerReader reads from the peer's connection and parses the messages
 type PeerReader struct {
 	peer   *Peer
 	conn   net.Conn
@@ -53,18 +53,18 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 			continue
 		}
 
-		messageIdBuf := make([]byte, 1)
-		_, err = pr.conn.Read(messageIdBuf)
+		messageIDBuf := make([]byte, 1)
+		_, err = pr.conn.Read(messageIDBuf)
 		if err != nil {
 			pr.logger.Println(err)
 			return
 		}
 
-		messageId := int(messageIdBuf[0])
+		messageID := int(messageIDBuf[0])
 
-		pr.logger.Printf("Message received - Length: %d, Message_id: %d\n", lengthPrefix, messageId)
+		pr.logger.Printf("Message received - Length: %d, Message_id: %d\n", lengthPrefix, messageID)
 
-		switch int(messageId) {
+		switch int(messageID) {
 		// no payload
 		case Choke:
 			pr.logger.Println("Received CHOKE")
@@ -178,14 +178,14 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 			}
 		case Extended:
 			pr.logger.Println("Received EXTENDED")
-			extendedIdBuf := make([]byte, 1)
-			_, err = pr.conn.Read(extendedIdBuf)
+			extendedIDBuf := make([]byte, 1)
+			_, err = pr.conn.Read(extendedIDBuf)
 			if err != nil {
 				pr.logger.Println(err)
 				return
 			}
 
-			if extendedIdBuf[0] != uint8(0) {
+			if extendedIDBuf[0] != uint8(0) {
 				pr.logger.Println("Received unsupported extended message")
 				continue
 			}
@@ -225,9 +225,7 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 
 			beforeAppend := pr.peer.torrent.hasAllMetadata()
 
-			err = pr.peer.torrent.setMetadataPiece(response.Piece, metadataPiece)
-			if err != nil {
-			}
+			_ = pr.peer.torrent.setMetadataPiece(response.Piece, metadataPiece)
 
 			if beforeAppend != pr.peer.torrent.hasAllMetadata() { // true iff we inserted the last piece
 				err = pr.peer.torrent.buildMetadataFile()

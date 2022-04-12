@@ -1,17 +1,17 @@
 package main
 
 import (
-	"net"
-	"time"
-
-	//	"encoding/binary"
 	"bufio"
 	"log"
+	"net"
 	"sync"
+	"time"
 )
 
+// KeepAlive messages are 4 byte, 0 values to signal to the peer we are still connected
 const KeepAlive = uint8(0)
 
+// PeerWriter is how we write to a peer over the connection
 type PeerWriter struct {
 	conn    net.Conn
 	writer  *bufio.Writer
@@ -69,22 +69,22 @@ func (pw *PeerWriter) sendMetadataRequest() {
 
 // use a time.Ticker to repeatedly request a metadata piece until we have the full file
 // todo make sure mutexes are used when checking pieces
-func (pw *PeerWriter) metadataRequestScheduler() {
-	pw.metadataRequestTicker = time.NewTicker(15 * time.Second)
-	for range pw.metadataRequestTicker.C {
-		if pw.peer.torrent.hasAllMetadata() {
-			pw.metadataRequestTicker.Stop()
-			go pw.peer.requestNewBlock()
-			// go pw.peer.queue_blocks()
-			return
-		} else {
-			if pw.peer.supportsMetadataRequests() {
-				pw.logger.Println("Requesting metadata")
-				pw.sendMetadataRequest()
-			}
-		}
-	}
-}
+// func (pw *PeerWriter) metadataRequestScheduler() {
+// 	pw.metadataRequestTicker = time.NewTicker(15 * time.Second)
+// 	for range pw.metadataRequestTicker.C {
+// 		if pw.peer.torrent.hasAllMetadata() {
+// 			pw.metadataRequestTicker.Stop()
+// 			go pw.peer.requestNewBlock()
+// 			// go pw.peer.queue_blocks()
+// 			return
+// 		} else {
+// 			if pw.peer.supportsMetadataRequests() {
+// 				pw.logger.Println("Requesting metadata")
+// 				pw.sendMetadataRequest()
+// 			}
+// 		}
+// 	}
+// }
 
 func (pw *PeerWriter) keepAliveScheduler() {
 	pw.keepAliveTicker = time.NewTicker(1 * time.Minute)

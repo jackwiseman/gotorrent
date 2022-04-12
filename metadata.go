@@ -10,6 +10,7 @@ import (
 	"time"
 )
 
+// Metadata stores the torrent's metadata, since we don't deal with .torrent files
 type Metadata struct {
 	Name     string "name"
 	NameUtf  string "name.utf-8"
@@ -20,11 +21,10 @@ type Metadata struct {
 	Files  []MetadataFile "files"
 }
 
-// for use in bencoding
+// MetadataFile is a subset of Metadata for use in bencoding, since a torrent can contain multiple files
 type MetadataFile struct {
 	Length int      "length"
 	Path   []string "path"
-	//	Path map[string]string //"path"
 }
 
 func (md *Metadata) String() string {
@@ -74,7 +74,7 @@ func (torrent *Torrent) setMetadataPiece(pieceNum int, metadataPiece []byte) err
 	// insert into raw byte array
 	startIndex := pieceNum*BlockLen + len(metadataPiece)
 	if startIndex > len(torrent.metadataRaw) {
-		return errors.New("Out of bounds")
+		return errors.New("metadata piece is out of bounds")
 	}
 
 	temp := torrent.metadataRaw[pieceNum*BlockLen+len(metadataPiece):]
