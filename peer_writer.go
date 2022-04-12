@@ -10,106 +10,105 @@ import (
 	"sync"
 )
 
-const KEEP_ALIVE = uint8(0)
+const KeepAlive = uint8(0)
 
-type Peer_Writer struct {
-	conn     net.Conn
-	writer   *bufio.Writer
-	buf_size int
-	peer     *Peer
-	logger   *log.Logger
+type PeerWriter struct {
+	conn    net.Conn
+	writer  *bufio.Writer
+	bufSize int
+	peer    *Peer
+	logger  *log.Logger
 
-	message_ch chan []byte // probably need to initialize this?
+	messageCh chan []byte // probably need to initialize this?
 
 	// for scheduling purposes
-	keep_alive_ticker       *time.Ticker
-	metadata_request_ticker *time.Ticker
+	keepAliveTicker       *time.Ticker
+	metadataRequestTicker *time.Ticker
 }
 
-func new_peer_writer(peer *Peer) *Peer_Writer {
-	var pw Peer_Writer
+func newPeerWriter(peer *Peer) *PeerWriter {
+	var pw PeerWriter
 	pw.peer = peer
 	pw.conn = peer.conn
-	pw.buf_size = 6 // len + id + (extension id if id == 20)
-	pw.writer = bufio.NewWriterSize(pw.conn, pw.buf_size)
-	pw.logger = log.New(peer.torrent.log_file, "[Peer Writer] "+pw.peer.ip+": ", log.Ltime|log.Lshortfile)
-	pw.message_ch = make(chan []byte)
+	pw.bufSize = 6 // len + id + (extension id if id == 20)
+	pw.writer = bufio.NewWriterSize(pw.conn, pw.bufSize)
+	pw.logger = log.New(peer.torrent.logFile, "[Peer Writer] "+pw.peer.ip+": ", log.Ltime|log.Lshortfile)
+	pw.messageCh = make(chan []byte)
 	return &pw
 }
 
-func (pw *Peer_Writer) write(message Message) {
+func (pw *PeerWriter) write(message Message) {
 	// TODO: investigate crash happening here
-	if pw.message_ch == nil {
+	if pw.messageCh == nil {
 		return
 	}
-	pw.message_ch <- message.marshall()
+	pw.messageCh <- message.marshall()
 }
 
-func (pw *Peer_Writer) write_extended(message Extended_Message) {
-	pw.message_ch <- message.marshall()
+func (pw *PeerWriter) writeExtended(message ExtendedMessage) {
+	pw.messageCh <- message.marshall()
 }
 
-func (pw *Peer_Writer) stop() {
+func (pw *PeerWriter) stop() {
 	defer pw.logger.Println("Closed")
-	pw.write(Message{1, STOP, nil})
-	if pw.keep_alive_ticker != nil {
-		pw.keep_alive_ticker.Stop()
+	pw.write(Message{1, Stop, nil})
+	if pw.keepAliveTicker != nil {
+		pw.keepAliveTicker.Stop()
 	}
-	if pw.metadata_request_ticker != nil {
-		pw.metadata_request_ticker.Stop()
+	if pw.metadataRequestTicker != nil {
+		pw.metadataRequestTicker.Stop()
 	}
 }
 
 // request specified metadata piece
-func (pw *Peer_Writer) send_metadata_request() {
-	payload := encode_metadata_request(pw.peer.torrent.get_rand_metadata_piece())
+func (pw *PeerWriter) sendMetadataRequest() {
+	payload := encodeMetadataRequest(pw.peer.torrent.getRandMetadataPiece())
 	// marshall will ensure the length_prefix is set, we don't need to specify it here
-	pw.write_extended(Extended_Message{0, 20, uint8(pw.peer.extensions["ut_metadata"]), []byte(payload)})
+	pw.writeExtended(ExtendedMessage{0, 20, uint8(pw.peer.extensions["ut_metadata"]), []byte(payload)})
 }
 
 // use a time.Ticker to repeatedly request a metadata piece until we have the full file
 // todo make sure mutexes are used when checking pieces
-func (pw *Peer_Writer) metadata_request_scheduler() {
-	pw.metadata_request_ticker = time.NewTicker(15 * time.Second)
-	for range pw.metadata_request_ticker.C {
-		if pw.peer.torrent.has_all_metadata() {
-			pw.metadata_request_ticker.Stop()
-			go pw.peer.request_new_block()
+func (pw *PeerWriter) metadataRequestScheduler() {
+	pw.metadataRequestTicker = time.NewTicker(15 * time.Second)
+	for range pw.metadataRequestTicker.C {
+		if pw.peer.torrent.hasAllMetadata() {
+			pw.metadataRequestTicker.Stop()
+			go pw.peer.requestNewBlock()
 			// go pw.peer.queue_blocks()
 			return
 		} else {
-			if pw.peer.supports_metadata_requests() {
+			if pw.peer.supportsMetadataRequests() {
 				pw.logger.Println("Requesting metadata")
-				pw.send_metadata_request()
+				pw.sendMetadataRequest()
 			}
 		}
 	}
 }
 
-func (pw *Peer_Writer) keep_alive_scheduler() {
-	pw.keep_alive_ticker = time.NewTicker(1 * time.Minute)
-	for range pw.keep_alive_ticker.C {
+func (pw *PeerWriter) keepAliveScheduler() {
+	pw.keepAliveTicker = time.NewTicker(1 * time.Minute)
+	for range pw.keepAliveTicker.C {
 		pw.conn.Write([]byte{0, 0, 0, 0})
 	}
-	pw.keep_alive_ticker.Stop()
+	pw.keepAliveTicker.Stop()
 }
 
-func (pw *Peer_Writer) run(wg *sync.WaitGroup) {
+func (pw *PeerWriter) run(wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	go pw.keep_alive_scheduler()
+	go pw.keepAliveScheduler()
 
-	pw.logger.Println(pw.peer.torrent.has_all_metadata())
-	if !pw.peer.torrent.has_all_metadata() {
-		//go pw.metadata_request_scheduler()
-		go pw.send_metadata_request()
+	pw.logger.Println(pw.peer.torrent.hasAllMetadata())
+	if !pw.peer.torrent.hasAllMetadata() {
+		go pw.sendMetadataRequest()
 	}
 
 	for {
-		msg := <-pw.message_ch
+		msg := <-pw.messageCh
 		pw.logger.Println(msg)
 
-		if int(msg[4]) == STOP {
+		if int(msg[4]) == Stop {
 			return
 		}
 

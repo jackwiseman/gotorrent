@@ -12,26 +12,26 @@ type Bar struct {
 	graph   string // the fill value for progress bar
 }
 
-func (bar *Bar) new_option(start, total int64) {
+func (bar *Bar) newOption(start, total int64) {
 	bar.cur = start
 	bar.total = total
 	if bar.graph == "" {
 		bar.graph = "#"
 	}
-	bar.percent = bar.get_percent()
+	bar.percent = bar.getPercent()
 	for i := 0; i < int(bar.percent); i += 2 {
 		bar.rate += bar.graph // initial progress position
 	}
 }
 
-func (bar *Bar) get_percent() int64 {
+func (bar *Bar) getPercent() int64 {
 	return int64(float32(bar.cur) / float32(bar.total) * 100)
 }
 
 func (bar *Bar) play(cur int64) {
 	bar.cur = cur
 	last := bar.percent
-	bar.percent = bar.get_percent()
+	bar.percent = bar.getPercent()
 	if bar.percent != last && bar.percent%2 == 0 {
 		bar.rate += bar.graph
 	}

@@ -8,9 +8,9 @@ func main() {
 	// flush current debug log
 	os.Remove("debug.log")
 
-	default_connections := 50
+	defaultConns := 50
 
 	// Links defined in magnet_links.go for now
-	torrent := new_torrent(LINK, default_connections)
-	torrent.start_download()
+	torr := newTorrent(LINK, defaultConns)
+	torr.startDownload()
 }

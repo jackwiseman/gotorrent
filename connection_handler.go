@@ -6,91 +6,87 @@ import (
 	"time"
 )
 
-type Connection_Handler struct {
+type ConnectionHandler struct {
 	// contains all peers which are either active or connecting
-	active_connections []*Peer
+	activeConns []*Peer
 	// index of where to grab next peer from torrent's master list of tracker-discovered peers
-	next_peer_index int
+	nextPeerIndex int
 	// ensures that peers are able to concurrently remove themselves from the connection handler
-	edit_connected_peers sync.Mutex
+	editConnectedPeers sync.Mutex
 	// check the connections every 'ticker seconds
 	ticker *time.Ticker
 	// associated torrent
 	torrent *Torrent
 	// channel for peers to notify connection handler that they've disconnected, allows us to not just run in a ticker
-	done_chan chan *Peer
+	doneChan chan *Peer
 
 	logger *log.Logger
 }
 
-func (torrent *Torrent) new_connection_handler() *Connection_Handler {
-	var ch Connection_Handler
-
+func (torrent *Torrent) newConnHandler() *ConnectionHandler {
+	var ch ConnectionHandler
 	ch.torrent = torrent
-
-	ch.done_chan = make(chan *Peer)
-	ch.logger = log.New(torrent.log_file, "[Connection Handler] ", log.Ltime|log.Lshortfile)
-	//	ch.logger.SetOutput(ioutil.Discard)
-
+	ch.doneChan = make(chan *Peer)
+	ch.logger = log.New(torrent.logFile, "[Connection Handler] ", log.Ltime|log.Lshortfile)
 	return &ch
 }
 
-func (ch *Connection_Handler) run() {
+func (ch *ConnectionHandler) run() {
 	defer ch.logger.Println("Finished running")
 
 	for {
-		bad_peers := 0
-		alive_peers := 0
+		badPeers := 0
+		alivePeers := 0
 		// attempt to fill up missing connections to reach max_peers
 		for i := 0; i < len(ch.torrent.peers); i++ {
-			if len(ch.active_connections) >= ch.torrent.max_peers {
+			if len(ch.activeConns) >= ch.torrent.maxPeers {
 				break
 			}
 			switch ch.torrent.peers[i].status {
-			case BAD:
-				bad_peers++
-				if i == len(ch.torrent.peers)-1 && bad_peers == len(ch.torrent.peers) {
+			case Bad:
+				badPeers++
+				if i == len(ch.torrent.peers)-1 && badPeers == len(ch.torrent.peers) {
 					// all peers are bad
 					return
 				}
-			case ALIVE:
-				alive_peers++
+			case Alive:
+				alivePeers++
 				continue
 			default:
-				ch.active_connections = append(ch.active_connections, &ch.torrent.peers[i])
+				ch.activeConns = append(ch.activeConns, &ch.torrent.peers[i])
 				ch.logger.Printf(" + %s", ch.torrent.peers[i].String())
-				go ch.active_connections[len(ch.active_connections)-1].run(ch.done_chan)
+				go ch.activeConns[len(ch.activeConns)-1].run(ch.doneChan)
 			}
 		}
-		ch.logger.Printf("Bad: %d Alive: %d Total: %d\n", bad_peers, alive_peers, len(ch.torrent.peers))
+		ch.logger.Printf("Bad: %d Alive: %d Total: %d\n", badPeers, alivePeers, len(ch.torrent.peers))
 		ch.logger.Println("------------------------")
-		ch.remove_connection(<-ch.done_chan) // block until someone disconnects
+		ch.removeConnection(<-ch.doneChan) // block until someone disconnects
 	}
 }
 
 // remove peer from the connection slice
-func (ch *Connection_Handler) remove_connection(peer *Peer) {
+func (ch *ConnectionHandler) removeConnection(peer *Peer) {
 	ch.logger.Printf(" - %s", peer.String())
-	if len(ch.active_connections) == 1 {
-		ch.active_connections = []*Peer{}
+	if len(ch.activeConns) == 1 {
+		ch.activeConns = []*Peer{}
 	} else {
-		for i := 0; i < len(ch.active_connections); i++ {
-			if ch.active_connections[i].ip == peer.ip {
-				ch.active_connections[i] = ch.active_connections[len(ch.active_connections)-1]
-				ch.active_connections = ch.active_connections[:len(ch.active_connections)-1]
+		for i := 0; i < len(ch.activeConns); i++ {
+			if ch.activeConns[i].ip == peer.ip {
+				ch.activeConns[i] = ch.activeConns[len(ch.activeConns)-1]
+				ch.activeConns = ch.activeConns[:len(ch.activeConns)-1]
 			}
 		}
 	}
 }
 
 // Prints all alive connections
-func (ch *Connection_Handler) String() string {
-	if len(ch.active_connections) == 0 {
+func (ch *ConnectionHandler) String() string {
+	if len(ch.activeConns) == 0 {
 		return "No peers connected"
 	}
 	var s string
-	for i := 0; i < len(ch.active_connections); i++ {
-		s += ch.active_connections[i].ip + " "
+	for i := 0; i < len(ch.activeConns); i++ {
+		s += ch.activeConns[i].ip + " "
 	}
 	return s
 }

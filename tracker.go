@@ -11,16 +11,16 @@ import (
 )
 
 type Tracker struct {
-	link          string
-	conn          net.Conn
-	timeout       time.Duration // default is 15 seconds
-	connection_id uint64
-	expires       time.Time
-	retries       int
+	link         string
+	conn         net.Conn
+	timeout      time.Duration // default is 15 seconds
+	connectionId uint64
+	expires      time.Time
+	retries      int
 }
 
 // return a new tracker from a string representing the link
-func new_tracker(link string) *Tracker {
+func newTracker(link string) *Tracker {
 	return &Tracker{link: link, timeout: 15 * time.Second, retries: 1}
 }
 
@@ -43,7 +43,7 @@ func (tracker *Tracker) disconnect() {
 }
 
 // the first step in getting peers from the tracker is getting a connection_id, which is valid for 2 minutes
-func (tracker *Tracker) set_connection_id() error {
+func (tracker *Tracker) setConnectionId() error {
 	for i := 0; i <= tracker.retries; i++ {
 		// Create a new Connection_Request with a new transaction_id
 		transaction_id, err := get_transaction_id()
@@ -90,7 +90,7 @@ func (tracker *Tracker) set_connection_id() error {
 			} else {
 				// Make sure the response has the connect action and the same transaction id that we sent
 				if binary.BigEndian.Uint32(buf[0:]) == 0 && binary.BigEndian.Uint32(buf[4:]) == transaction_id {
-					tracker.connection_id = binary.BigEndian.Uint64(buf[8:])
+					tracker.connectionId = binary.BigEndian.Uint64(buf[8:])
 					return nil
 				} else {
 					return errors.New("Error: received bad connect data from tracker")
@@ -110,14 +110,14 @@ func (tracker *Tracker) scrape(torrent *Torrent) error {
 			return (err)
 		}
 
-		packet_len := 16 + len(torrent.info_hash) // this will always be 20, but will stay here for future scalability
+		packet_len := 16 + len(torrent.infoHash) // this will always be 20, but will stay here for future scalability
 
 		packet := make([]byte, 16+(20))
-		binary.BigEndian.PutUint64(packet[0:], tracker.connection_id)
+		binary.BigEndian.PutUint64(packet[0:], tracker.connectionId)
 		binary.BigEndian.PutUint32(packet[8:], 2) // action 2 = scrape
 		binary.BigEndian.PutUint32(packet[12:], transaction_id)
 
-		copy(packet[16:], torrent.info_hash)
+		copy(packet[16:], torrent.infoHash)
 
 		tracker.conn.SetWriteDeadline(time.Now().Add(tracker.timeout))
 
@@ -179,13 +179,13 @@ func (tracker *Tracker) announce(torrent *Torrent, num_want int) (int, error) {
 		// Create announce packet
 		packet := make([]byte, 98)
 		// connection_id
-		binary.BigEndian.PutUint64(packet[0:], tracker.connection_id)
+		binary.BigEndian.PutUint64(packet[0:], tracker.connectionId)
 		// action
 		binary.BigEndian.PutUint32(packet[8:], 1)
 		// transaction_id
 		binary.BigEndian.PutUint32(packet[12:], transaction_id)
 		// info_hash
-		copy(packet[16:], torrent.info_hash)
+		copy(packet[16:], torrent.infoHash)
 		// peer_id (20 bytes)
 		peer_id := "GoLangTorrent_v0.0.1" // should be randomly set
 		copy(packet[36:], []byte(peer_id))
@@ -234,7 +234,7 @@ func (tracker *Tracker) announce(torrent *Torrent, num_want int) (int, error) {
 			ip_address := make(net.IP, 4)
 			binary.BigEndian.PutUint32(ip_address, ip_address_raw)
 
-			torrent.peers = append(torrent.peers, *new_peer(ip_address.String(), strconv.Itoa(int(port)), torrent))
+			torrent.peers = append(torrent.peers, *newPeer(ip_address.String(), strconv.Itoa(int(port)), torrent))
 		}
 		return seeders, nil
 	}
