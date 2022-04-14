@@ -142,22 +142,10 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 			pr.logger.Printf("Index: %d, Begin: %d", index, begin)
 
 			blockBuf := make([]byte, lengthPrefix-9)
-			totalRead := 0
-			for totalRead < lengthPrefix-9 {
-				tempBuf := make([]byte, len(blockBuf)-totalRead)
-				n, err := pr.conn.Read(tempBuf)
-				if err != nil {
-					pr.logger.Println(err)
-					return
-				}
-				blockBufRemainder := blockBuf[totalRead+n:]
-				blockBuf = append(blockBuf[0:totalRead], tempBuf[:n]...)
-				blockBuf = append(blockBuf, blockBufRemainder...)
-				pr.logger.Println(n)
-				totalRead += n
+			_, err = io.ReadFull(pr.conn, blockBuf)
+			if err != nil {
+				return
 			}
-
-			pr.logger.Printf("Extended message info - Got %d bytes, expecting %d\n", totalRead, len(blockBuf))
 
 			pr.peer.torrent.setBlock(index, begin, blockBuf)
 

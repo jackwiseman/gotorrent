@@ -263,19 +263,9 @@ func (peer *Peer) getBitfield() error {
 	}
 
 	bitfieldBuf := make([]byte, lengthPrefix-1)
-	totalRead := 0
-	for totalRead < lengthPrefix-1 {
-		tempBuf := make([]byte, len(bitfieldBuf)-totalRead)
-		n, err := peer.conn.Read(tempBuf)
-		if err != nil {
-			return err
-		}
-
-		bitfieldBufRemainder := bitfieldBuf[totalRead+n:]
-		bitfieldBuf = append(bitfieldBuf[0:totalRead], tempBuf[:n]...)
-		bitfieldBuf = append(bitfieldBuf, bitfieldBufRemainder...)
-		peer.logger.Println(n)
-		totalRead += n
+	_, err = io.ReadFull(peer.conn, bitfieldBuf)
+	if err != nil {
+		return err
 	}
 
 	peer.bitfield = bitfieldBuf
