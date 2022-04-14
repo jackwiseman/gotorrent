@@ -217,8 +217,9 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 			pr.peer.torrent.metadataMx.Lock()
 
 			beforeAppend := pr.peer.torrent.hasAllMetadata()
-
-			fmt.Println(response.Piece)
+			if beforeAppend {
+				continue
+			}
 
 			err = pr.peer.torrent.setMetadataPiece(response.Piece, metadataPiece)
 			if err != nil {
@@ -239,7 +240,9 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 			}
 
 			pr.peer.torrent.metadataMx.Unlock()
-			pr.peer.pw.sendMetadataRequest()
+			if !pr.peer.torrent.hasAllMetadata() {
+				pr.peer.pw.sendMetadataRequest()
+			}
 		default:
 			pr.logger.Println("Received bad message_id")
 		}
