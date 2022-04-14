@@ -42,17 +42,19 @@ type ExtendedMessage struct {
 
 // ExtendedHandshakePayload is what we receive from a peer when they support extended messages -- all variables must be exported to allow bencode to work
 type ExtendedHandshakePayload struct {
-	M            map[string]int // supported messages
-	V            string         // client version
-	MetadataSize int            // size of the metadata in bytes
-	P            int            // tcp listen port -- eventually should extend to give support for ipv4 and ipv6
-	Reqq         int            // number of outstanding request messages this client supports
+	Extensions   map[string]int `bencode:"m"`             // supported messages
+	Client       string         `bencode:"v"`             // client version
+	MetadataSize int            `bencode:"metadata_size"` // size of the metadata in bytes
+	Port         int            `bencode:"p"`             // tcp listen port -- eventually should extend to give support for ipv4 and ipv6
+	Requests     int            `bencode:"reqq"`          // number of outstanding request messages this client supports
+	Ipv4         string         `bencode:"ipv4"`
+	Ipv6         string         `bencode:"ipv6"`
 }
 
 // MetadataRequest is the message that is sent out when we want a piece of the metadata
 type MetadataRequest struct {
-	MsgType int "msg_type"
-	Piece   int "piece"
+	MsgType int `bencode:"msg_type"`
+	Piece   int `bencode:"piece"`
 }
 
 // MetadataResponse is the response we get from a MetadataRequest
@@ -106,14 +108,14 @@ func decodeMetadataRequest(payload []byte) MetadataResponse {
 	return result
 }
 
-func decodeHandshake(payload []byte) *ExtendedHandshakePayload {
-	var result = ExtendedHandshakePayload{nil, "v", 0, 0, 0}
+func decodeHandshake(payload []byte) (*ExtendedHandshakePayload, error) {
+	var result = ExtendedHandshakePayload{nil, "v", 0, 0, 0, "", ""}
 	reader := bytes.NewReader([]byte(payload))
 	err := bencode.Unmarshal(reader, &result)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	return &result
+	return &result, nil
 }
 
 func getHandshakeMessage(torrent *Torrent) []byte {

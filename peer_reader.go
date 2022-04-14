@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
+	"io"
 	"log"
 	"net"
 	"sync"
@@ -39,7 +41,7 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 		}
 
 		lengthPrefixBuf := make([]byte, 4)
-		b, err := pr.conn.Read(lengthPrefixBuf)
+		b, err := io.ReadFull(pr.peer.conn, lengthPrefixBuf)
 		if err != nil {
 			pr.logger.Println(err)
 			pr.logger.Println(b)
@@ -194,22 +196,10 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 			}
 
 			payloadBuf := make([]byte, lengthPrefix-2)
-			totalRead := 0
-			for totalRead < lengthPrefix-2 {
-				tempBuf := make([]byte, len(payloadBuf)-totalRead)
-				n, err := pr.conn.Read(tempBuf)
-				if err != nil {
-					pr.logger.Println(err)
-					return
-				}
-				payloadBufRemainder := payloadBuf[totalRead+n:]
-				payloadBuf = append(payloadBuf[0:totalRead], tempBuf[:n]...)
-				payloadBuf = append(payloadBuf, payloadBufRemainder...)
-				pr.logger.Println(n)
-				totalRead += n
+			_, err = io.ReadFull(pr.conn, payloadBuf)
+			if err != nil {
+				return
 			}
-
-			pr.logger.Printf("Extended message info - Got %d bytes, expecting %d\n", totalRead, len(payloadBuf))
 
 			bencodeEnd := bytes.Index(payloadBuf, []byte("ee")) + 2
 			bencode := payloadBuf[0:bencodeEnd]
@@ -228,7 +218,12 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 
 			beforeAppend := pr.peer.torrent.hasAllMetadata()
 
-			_ = pr.peer.torrent.setMetadataPiece(response.Piece, metadataPiece)
+			fmt.Println(response.Piece)
+
+			err = pr.peer.torrent.setMetadataPiece(response.Piece, metadataPiece)
+			if err != nil {
+				fmt.Println(err)
+			}
 
 			if beforeAppend != pr.peer.torrent.hasAllMetadata() { // true iff we inserted the last piece
 				err = pr.peer.torrent.buildMetadataFile()

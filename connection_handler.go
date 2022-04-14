@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"log"
 )
 
@@ -21,6 +22,7 @@ func (torrent *Torrent) newConnHandler() *ConnectionHandler {
 	ch.torrent = torrent
 	ch.doneChan = make(chan *Peer)
 	ch.logger = log.New(torrent.logFile, "[Connection Handler] ", log.Ltime|log.Lshortfile)
+	ch.logger.SetOutput(io.Discard)
 	return &ch
 }
 

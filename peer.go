@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/binary"
 	"errors"
+	"io"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -213,15 +214,19 @@ func (peer *Peer) performHandshake() error {
 		}
 
 		lengthPrefix := binary.BigEndian.Uint32(lengthPrefixBuf[0:])
-
 		buf = make([]byte, int(lengthPrefix))
-		_, err = peer.conn.Read(buf)
+
+		_, err = io.ReadFull(peer.conn, buf)
 		if err != nil {
 			return err
 		}
 
-		result := decodeHandshake(buf[2:])
-		peer.setExtensions(result.M)
+		result, err := decodeHandshake(buf[2:])
+		if err != nil {
+			peer.status = Bad
+			return err
+		}
+		peer.setExtensions(result.Extensions)
 
 		if result.MetadataSize != 0 && peer.torrent.metadataSize == 0 { // make sure they attached metadata size, also no reason to overwrite if we already set
 			peer.torrent.metadataSize = result.MetadataSize

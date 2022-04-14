@@ -12,19 +12,19 @@ import (
 
 // Metadata stores the torrent's metadata, since we don't deal with .torrent files
 type Metadata struct {
-	Name     string "name"
-	NameUtf  string "name.utf-8"
-	PieceLen int    "piece length"
-	Pieces   string "pieces"
+	Name     string `bencode:"name"`
+	NameUtf  string `bencode:"name.utf-8"`
+	PieceLen int    `bencode:"piece length"`
+	Pieces   string `bencode:"pieces"`
 	// contains one of the following, where 'length' means there is one file, and 'files' means there are multiple, only single file downloads will be allowed for the moment
-	Length int            "length"
-	Files  []MetadataFile "files"
+	Length int            `bencode:"length"`
+	Files  []MetadataFile `bencode:"files"`
 }
 
 // MetadataFile is a subset of Metadata for use in bencoding, since a torrent can contain multiple files
 type MetadataFile struct {
-	Length int      "length"
-	Path   []string "path"
+	Length int      `bencode:"length"`
+	Path   []string `bencode:"path"`
 }
 
 func (md *Metadata) String() string {
@@ -72,6 +72,7 @@ func (torrent *Torrent) hasMetadataPiece(pieceNum int) bool {
 
 func (torrent *Torrent) setMetadataPiece(pieceNum int, metadataPiece []byte) error {
 	// insert into raw byte array
+	fmt.Printf("Metadata len: %v\n", len(torrent.metadataRaw))
 	startIndex := pieceNum*BlockLen + len(metadataPiece)
 	if startIndex > len(torrent.metadataRaw) {
 		return errors.New("metadata piece is out of bounds")
@@ -83,6 +84,7 @@ func (torrent *Torrent) setMetadataPiece(pieceNum int, metadataPiece []byte) err
 
 	// set as "have"
 	torrent.metadataPieces[pieceNum/int(7)] = torrent.metadataPieces[pieceNum/int(7)] | (1 << (7 - pieceNum%8))
+	fmt.Println(torrent.metadataPieces)
 
 	return nil
 }
