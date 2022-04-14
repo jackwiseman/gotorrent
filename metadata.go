@@ -10,85 +10,88 @@ import (
 	"time"
 )
 
+// Metadata stores the torrent's metadata, since we don't deal with .torrent files
 type Metadata struct {
-	Name      string "name"
-	Name_utf  string "name.utf-8"
-	Piece_len int    "piece length"
-	Pieces    string "pieces"
+	Name     string `bencode:"name"`
+	NameUtf  string `bencode:"name.utf-8"`
+	PieceLen int    `bencode:"piece length"`
+	Pieces   string `bencode:"pieces"`
 	// contains one of the following, where 'length' means there is one file, and 'files' means there are multiple, only single file downloads will be allowed for the moment
-	Length int             "length"
-	Files  []Metadata_file "files"
+	Length int            `bencode:"length"`
+	Files  []MetadataFile `bencode:"files"`
 }
 
-// for use in bencoding
-type Metadata_file struct {
-	Length int      "length"
-	Path   []string "path"
-	//	Path map[string]string //"path"
+// MetadataFile is a subset of Metadata for use in bencoding, since a torrent can contain multiple files
+type MetadataFile struct {
+	Length int      `bencode:"length"`
+	Path   []string `bencode:"path"`
 }
 
 func (md *Metadata) String() string {
-	s := "Name: " + md.Name + "\nPiece length: " + strconv.Itoa(md.Piece_len) + "\nLength: " + strconv.Itoa(md.Length)
+	s := "Name: " + md.Name + "\nPiece length: " + strconv.Itoa(md.PieceLen) + "\nLength: " + strconv.Itoa(md.Length)
 	return s
 }
 
-func (torrent *Torrent) num_metadata_pieces() int {
-	return int(math.Round(float64(torrent.metadata_size)/float64(16*1024) + 1.0))
+func (torrent *Torrent) numMetadataPieces() int {
+	return int(math.Round(float64(torrent.metadataSize)/float64(BlockLen) + 1.0))
 }
 
-func (torrent *Torrent) has_all_metadata() bool {
-	if torrent.num_metadata_pieces() == 0 {
+func (torrent *Torrent) hasAllMetadata() bool {
+	if torrent.numMetadataPieces() == 0 {
 		return false
 	}
-	for i := 0; i < torrent.num_metadata_pieces(); i++ {
-		if !torrent.has_metadata_piece(i) {
+	for i := 0; i < torrent.numMetadataPieces(); i++ {
+		if !torrent.hasMetadataPiece(i) {
 			return false
 		}
 	}
 	return true
 }
 
-func (torrent *Torrent) get_rand_metadata_piece() int {
-	if torrent.has_all_metadata() {
+func (torrent *Torrent) getRandMetadataPiece() int {
+	if torrent.hasAllMetadata() {
 		return -1
 	}
 
 	rand.Seed(time.Now().UnixNano())
 
 	for {
-		test_piece := rand.Intn(torrent.num_metadata_pieces())
-		if !torrent.has_metadata_piece(test_piece) {
-			return test_piece
+		testPiece := rand.Intn(torrent.numMetadataPieces())
+		if !torrent.hasMetadataPiece(testPiece) {
+			return testPiece
 		}
 	}
 }
 
-func (torrent *Torrent) has_metadata_piece(piece_num int) bool {
-	if len(torrent.metadata_pieces) == 0 {
+func (torrent *Torrent) hasMetadataPiece(pieceNum int) bool {
+	if len(torrent.metadataPieces) == 0 {
 		return false
 	}
-	return (torrent.metadata_pieces[piece_num/int(7)]>>(7-piece_num%8))&1 == 1
+	return (torrent.metadataPieces[pieceNum/int(7)]>>(7-pieceNum%8))&1 == 1
 }
 
-func (torrent *Torrent) set_metadata_piece(piece_num int, metadata_piece []byte) error {
+func (torrent *Torrent) setMetadataPiece(pieceNum int, metadataPiece []byte) error {
+	if torrent.hasAllMetadata() {
+		return nil
+	}
 	// insert into raw byte array
-	start_index := piece_num*(1024*16) + len(metadata_piece)
-	if start_index > len(torrent.metadata_raw) {
-		return errors.New("Out of bounds")
+	startIndex := pieceNum*BlockLen + len(metadataPiece)
+	if startIndex > len(torrent.metadataRaw) {
+		return errors.New("metadata piece is out of bounds")
 	}
 
-	temp := torrent.metadata_raw[piece_num*(1024*16)+len(metadata_piece):]
-	torrent.metadata_raw = append(torrent.metadata_raw[0:piece_num*(1024*16)], metadata_piece...)
-	torrent.metadata_raw = append(torrent.metadata_raw, temp...)
+	temp := torrent.metadataRaw[pieceNum*BlockLen+len(metadataPiece):]
+	torrent.metadataRaw = append(torrent.metadataRaw[0:pieceNum*BlockLen], metadataPiece...)
+	torrent.metadataRaw = append(torrent.metadataRaw, temp...)
 
 	// set as "have"
-	torrent.metadata_pieces[piece_num/int(7)] = torrent.metadata_pieces[piece_num/int(7)] | (1 << (7 - piece_num%8))
+	torrent.metadataPieces[pieceNum/int(7)] = torrent.metadataPieces[pieceNum/int(7)] | (1 << (7 - pieceNum%8))
 
 	return nil
 }
 
-func (torrent *Torrent) build_metadata_file() error {
-	err := os.WriteFile("metadata.torrent", torrent.metadata_raw, 0644)
+func (torrent *Torrent) buildMetadataFile() error {
+	err := os.WriteFile("metadata.torrent", torrent.metadataRaw, 0644)
 	fmt.Println("Received metadata")
 	if err != nil {
 		return err

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/binary"
 	"errors"
+	"io"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -12,49 +13,48 @@ import (
 	"time"
 )
 
+// Identifiers for peer status to denote whether we should attempt to connect to them again or not
 const (
-	BAD     = -1 // could not connect at all
-	UNKNOWN = 0  // have not attempted connected yet
-	DEAD    = 1  // lost connection some time after handshake + bitfield -- ie we can try to connect to them again
-	ALIVE   = 2  // currently connected
+	Bad     = -1 // could not connect at all
+	Unknown = 0  // have not attempted connected yet
+	Dead    = 1  // lost connection some time after handshake + bitfield -- ie we can try to connect to them again
+	Alive   = 2  // currently connected
 )
 
+// Peer is a connection that we read/write to to download files from, discovered through the Tracker
 type Peer struct {
-	ip            string
-	port          string
-	conn          net.Conn
-	uses_extended bool // false by default
-	extensions    map[string]int
-	choked        bool // whether we are choked by this peer or not, will likely need a name change upon seed support
-	bitfield      []byte
-	status        int
+	ip           string
+	port         string
+	conn         net.Conn
+	usesExtended bool // false by default
+	extensions   map[string]int
+	choked       bool // whether we are choked by this peer or not, will likely need a name change upon seed support
+	bitfield     []byte
+	status       int
 
 	torrent *Torrent // associated torrent
 
 	// wrapped io.Reader/io.Writer interfaces
-	pw *Peer_Writer
-	pr *Peer_Reader
-
-	requests []byte
-	// responses []byte
+	pw *PeerWriter
+	pr *PeerReader
 
 	logger *log.Logger
 }
 
-func (peer *Peer) set_extensions(extensions map[string]int) {
+func (peer *Peer) setExtensions(extensions map[string]int) {
 	peer.extensions = extensions
 }
 
-func new_peer(ip string, port string, torrent *Torrent) *Peer {
+func newPeer(ip string, port string, torrent *Torrent) *Peer {
 	var peer Peer
 
 	peer.ip = ip
 	peer.port = port
 	peer.torrent = torrent
 	peer.choked = true
-	peer.logger = log.New(peer.torrent.log_file, "[Peer] "+peer.ip+": ", log.Ltime|log.Lshortfile)
+	peer.logger = log.New(peer.torrent.logFile, "[Peer] "+peer.ip+": ", log.Ltime|log.Lshortfile)
 	peer.logger.SetOutput(ioutil.Discard)
-	peer.status = UNKNOWN // implied by default
+	peer.status = Unknown // implied by default
 
 	return &peer
 }
@@ -63,36 +63,36 @@ func (peer *Peer) String() string {
 	return peer.ip + " " + strconv.Itoa(peer.status)
 }
 
-func (peer *Peer) run(done_ch chan *Peer) {
-	defer func() { done_ch <- peer }()
+func (peer *Peer) run(doneCh chan *Peer) {
+	defer func() { doneCh <- peer }()
 
 	peer.logger.Printf(" + %s", peer.String())
 
-	peer.status = ALIVE
+	peer.status = Alive
 
 	err := peer.connect()
 	if err != nil {
 		peer.logger.Println("Connection error: " + err.Error())
-		peer.status = BAD
+		peer.status = Bad
 		return
 	}
 
-	err = peer.perform_handshake()
+	err = peer.performHandshake()
 	if err != nil {
 		peer.logger.Println("Handshake error: " + err.Error())
-		peer.status = BAD
+		peer.status = Bad
 		return
 	}
 
-	err = peer.get_bitfield()
+	err = peer.getBitfield()
 	if err != nil {
 		peer.logger.Println("Bitfield error: " + err.Error())
-		peer.status = BAD
+		peer.status = Bad
 		return
 	}
 
 	// Drop this peer if we don't have metadata yet and they aren't equipped to send it
-	if !peer.supports_metadata_requests() && !peer.torrent.has_all_metadata() {
+	if !peer.supportsMetadataRequests() && !peer.torrent.hasAllMetadata() {
 		peer.disconnect()
 		return
 	}
@@ -107,15 +107,12 @@ func (peer *Peer) run(done_ch chan *Peer) {
 	peer.disconnect()
 }
 
-func (peer *Peer) supports_metadata_requests() bool {
-	if !peer.uses_extended {
+func (peer *Peer) supportsMetadataRequests() bool {
+	if !peer.usesExtended {
 		return false
 	}
 	_, ok := peer.extensions["ut_metadata"]
-	if !ok {
-		return false
-	}
-	return true
+	return ok
 }
 
 // Connect to peer via TCP and create a peer_reader over connection
@@ -128,220 +125,218 @@ func (peer *Peer) connect() error {
 	}
 
 	peer.conn = conn
-	peer.pr = new_peer_reader(peer)
-	peer.pw = new_peer_writer(peer)
+	peer.pr = newPeerReader(peer)
+	peer.pw = newPeerWriter(peer)
 	return nil
 }
 
 // Sends an INTERESTED message about the given torrent so that we can be unchoked
-func (peer *Peer) send_interested() {
+/*func (peer *Peer) sendInterested() {
 	if peer.pw == nil {
 		return
 	}
-	peer.pw.write(Message{1, INTERESTED, nil})
-}
+	peer.pw.write(Message{1, Interested, nil})
+}*/
 
 // send a request message to peer asking for specified block
-func (peer *Peer) request_block(piece_num int, offset int) {
-	peer.logger.Printf("\nRequsting block (%d, %d)", piece_num, offset)
+func (peer *Peer) requestBlock(pieceNum int, offset int) {
+	peer.logger.Printf("\nRequsting block (%d, %d)", pieceNum, offset)
 	if peer.pw == nil {
 		return
 	}
 
 	payload := make([]byte, 12)
-	binary.BigEndian.PutUint32(payload[0:], uint32(piece_num))
-	binary.BigEndian.PutUint32(payload[4:], uint32(offset*BLOCK_LEN))
+	binary.BigEndian.PutUint32(payload[0:], uint32(pieceNum))
+	binary.BigEndian.PutUint32(payload[4:], uint32(offset*BlockLen))
 
 	// if this is the last blocks, we need to request the correct len
-	if (piece_num*peer.torrent.get_num_blocks_in_piece())+offset+1 == peer.torrent.get_num_blocks() {
-		binary.BigEndian.PutUint32(payload[8:], uint32(peer.torrent.metadata.Length%BLOCK_LEN))
+	if (pieceNum*peer.torrent.getNumBlocksInPiece())+offset+1 == peer.torrent.getNumBlocks() {
+		binary.BigEndian.PutUint32(payload[8:], uint32(peer.torrent.metadata.Length%BlockLen))
 	} else {
-		binary.BigEndian.PutUint32(payload[8:], uint32(BLOCK_LEN))
+		binary.BigEndian.PutUint32(payload[8:], uint32(BlockLen))
 	}
 
-	peer.pw.write(Message{13, REQUEST, payload})
+	peer.pw.write(Message{13, Request, payload})
 }
 
 // TODO: ensure read/write are closed
 func (peer *Peer) disconnect() {
 	if peer.conn != nil { // need to look into this, also keeping it open
-		peer.conn.Close()
+		err := peer.conn.Close()
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 
-func (peer *Peer) perform_handshake() error {
+func (peer *Peer) performHandshake() error {
 	if peer.conn == nil {
-		return errors.New("Error: peer's connection is nil")
+		return errors.New("peer's connection is nil")
 	}
 
-	outgoing_handshake := get_handshake_message(peer.torrent)
-	_, err := peer.conn.Write(outgoing_handshake)
+	outgoingHandshake := getHandshakeMessage(peer.torrent)
+	_, err := peer.conn.Write(outgoingHandshake)
 	if err != nil {
-		return errors.New("Error: unable to write to peer")
+		return errors.New("unable to write to peer")
 	}
 
 	// Read from peer
-	pstrlen_buf := make([]byte, 1)
-	_, err = peer.conn.Read(pstrlen_buf)
+	pstrlenBuf := make([]byte, 1)
+	_, err = peer.conn.Read(pstrlenBuf)
 	if err != nil {
-		return errors.New("Error: could not read from peer")
+		return errors.New("could not read from peer")
 	}
 
-	pstrlen := int(pstrlen_buf[0])
+	pstrlen := int(pstrlenBuf[0])
 
 	buf := make([]byte, 48+pstrlen)
 	_, err = peer.conn.Read(buf)
 	if err != nil {
-		return errors.New("Error: could not read from peer")
+		return errors.New("could not read from peer")
 	}
 
 	// TODO: confirm that peerid is the same as supplied on tracker
 
 	// if the peer utilizes extended messages (most likely), we next need to send an extended handshake, mostly just for getting metadata
 	if buf[24]&0x10 == 16 {
-		peer.uses_extended = true
-		outgoing_extended_handshake := get_extended_handshake_message()
+		peer.usesExtended = true
+		outgoingExtendedHandshake := getExtendedHandshakeMessage()
 
-		bytes_written, err := peer.conn.Write(outgoing_extended_handshake)
-		if err != nil || bytes_written < len(outgoing_extended_handshake) {
-			return errors.New("Error: unable to write to peer in extended handshake")
+		bytesWritten, err := peer.conn.Write(outgoingExtendedHandshake)
+		if err != nil || bytesWritten < len(outgoingExtendedHandshake) {
+			return errors.New("unable to write to peer in extended handshake")
 		}
 
-		length_prefix_buf := make([]byte, 4)
-		_, err = peer.conn.Read(length_prefix_buf)
+		lengthPrefixBuf := make([]byte, 4)
+		_, err = peer.conn.Read(lengthPrefixBuf)
 		if err != nil {
 			return err
 		}
 
-		length_prefix := binary.BigEndian.Uint32(length_prefix_buf[0:])
+		lengthPrefix := binary.BigEndian.Uint32(lengthPrefixBuf[0:])
+		buf = make([]byte, int(lengthPrefix))
 
-		buf = make([]byte, int(length_prefix))
-		_, err = peer.conn.Read(buf)
+		_, err = io.ReadFull(peer.conn, buf)
 		if err != nil {
 			return err
 		}
 
-		result := decode_handshake(buf[2:])
-		peer.set_extensions(result.M)
+		result, err := decodeHandshake(buf[2:])
+		if err != nil {
+			peer.status = Bad
+			return err
+		}
+		peer.setExtensions(result.Extensions)
 
-		if result.Metadata_size != 0 && peer.torrent.metadata_size == 0 { // make sure they attached metadata size, also no reason to overwrite if we already set
-			peer.torrent.metadata_size = result.Metadata_size
-			peer.torrent.metadata_raw = make([]byte, result.Metadata_size)
-			peer.torrent.metadata_pieces = make([]byte, (peer.torrent.num_metadata_pieces()+7)/8)
-			peer.logger.Println(peer.torrent.metadata_pieces)
-			peer.logger.Println(peer.torrent.num_metadata_pieces())
+		if result.MetadataSize != 0 && peer.torrent.metadataSize == 0 { // make sure they attached metadata size, also no reason to overwrite if we already set
+			peer.torrent.metadataSize = result.MetadataSize
+			peer.torrent.metadataRaw = make([]byte, result.MetadataSize)
+			peer.torrent.metadataPieces = make([]byte, (peer.torrent.numMetadataPieces()+7)/8)
+			peer.logger.Println(peer.torrent.metadataPieces)
+			peer.logger.Println(peer.torrent.numMetadataPieces())
 		}
 	}
 	return nil
 }
 
 // Read the bitfield, should be called directly after a handshake
-func (peer *Peer) get_bitfield() error {
-	length_prefix_buf := make([]byte, 4)
-	message_id_buf := make([]byte, 1)
+func (peer *Peer) getBitfield() error {
+	lengthPrefixBuf := make([]byte, 4)
+	messageIDBuf := make([]byte, 1)
 
-	_, err := peer.conn.Read(length_prefix_buf)
+	_, err := peer.conn.Read(lengthPrefixBuf)
 	if err != nil {
 		return err
 	}
 
-	_, err = peer.conn.Read(message_id_buf)
+	_, err = peer.conn.Read(messageIDBuf)
 	if err != nil {
 		return err
 	}
 
-	length_prefix := int(binary.BigEndian.Uint32(length_prefix_buf[0:]))
-	message_id := int(message_id_buf[0])
+	lengthPrefix := int(binary.BigEndian.Uint32(lengthPrefixBuf[0:]))
+	messageID := int(messageIDBuf[0])
 
-	if message_id != BITFIELD {
-		peer.logger.Printf("Unexpected BITFIELD: length: %d, id: %d", length_prefix, message_id)
-		return errors.New("Got unexpected message from peer, expecting BITFIELD")
+	if messageID != Bitfield {
+		peer.logger.Printf("Unexpected BITFIELD: length: %d, id: %d", lengthPrefix, messageID)
+		return errors.New("got unexpected message from peer, expecting BITFIELD")
 	}
 
-	bitfield_buf := make([]byte, length_prefix-1)
-	total_read := 0
-	for total_read < length_prefix-1 {
-		temp_buf := make([]byte, len(bitfield_buf)-total_read)
-		n, err := peer.conn.Read(temp_buf)
+	bitfieldBuf := make([]byte, lengthPrefix-1)
+	totalRead := 0
+	for totalRead < lengthPrefix-1 {
+		tempBuf := make([]byte, len(bitfieldBuf)-totalRead)
+		n, err := peer.conn.Read(tempBuf)
 		if err != nil {
 			return err
 		}
 
-		bitfield_buf_remainder := bitfield_buf[total_read+n:]
-		bitfield_buf = append(bitfield_buf[0:total_read], temp_buf[:n]...)
-		bitfield_buf = append(bitfield_buf, bitfield_buf_remainder...)
+		bitfieldBufRemainder := bitfieldBuf[totalRead+n:]
+		bitfieldBuf = append(bitfieldBuf[0:totalRead], tempBuf[:n]...)
+		bitfieldBuf = append(bitfieldBuf, bitfieldBufRemainder...)
 		peer.logger.Println(n)
-		total_read += n
+		totalRead += n
 	}
 
-	peer.bitfield = bitfield_buf
+	peer.bitfield = bitfieldBuf
 	peer.logger.Println(peer.bitfield)
 	return nil
 }
 
 // Request queue_size blocks from peer, so that time is not lost between each received block and each new requested one
-func (peer *Peer) queue_blocks(queue_size int) {
-	peer.send_interested()
+/*func (peer *Peer) queueBlocks(queueSize int) {
+	peer.sendInterested()
 
 	for {
 		if !peer.choked {
 			break
 		}
 	}
-	peer.requests = make([]byte, ((peer.torrent.get_num_blocks())+8)/8)
 
-	for i := 0; i < queue_size; i++ {
-		piece, offset := peer.get_new_block()
+	for i := 0; i < queueSize; i++ {
+		piece, offset := peer.getNewBlock()
 		peer.logger.Printf("- (%d, %d)", piece, offset)
 		if piece == -1 {
 			continue
 		}
-		index := (piece * peer.torrent.get_num_blocks_in_piece()) + offset
-		peer.requests[index/8] = peer.requests[index/8] | (1 << (7 - (index % 8)))
-		peer.request_block(piece, offset)
+		peer.requestBlock(piece, offset)
 	}
-}
+}*/
 
 // Send a request block message to this peer asking for a random non-downloaded block
-func (peer *Peer) request_new_block() {
-	if !peer.torrent.has_all_metadata() {
+func (peer *Peer) requestNewBlock() {
+	if !peer.torrent.hasAllMetadata() {
 		return
 	}
-	go peer.torrent.check_download_status()
-	piece, offset := peer.get_new_block()
+	go peer.torrent.checkDownloadStatus()
+	piece, offset := peer.getNewBlock()
 	if piece == -1 {
 		return
 	}
 
-	peer.request_block(piece, offset)
-}
-
-// Return true if we have requested this block from this peer
-func (peer *Peer) made_request(piece int, offset int) bool {
-	index := (piece * peer.torrent.get_num_blocks_in_piece()) + offset
-	return (peer.requests[index/8]>>(7-(index%8)))&1 == 1
+	peer.requestBlock(piece, offset)
 }
 
 // Return a random piece + offset pair corresponding to a non downloaded block
 // or -1, -1 in the case of all blocks already downloaded
-func (peer *Peer) get_new_block() (int, int) {
+func (peer *Peer) getNewBlock() (int, int) {
 	rand.Seed(time.Now().UnixNano())
-	if peer.torrent.has_all_data() {
+	if peer.torrent.hasAllData() {
 		peer.logger.Println("Option 1")
 		return -1, -1
 	}
 
 	for {
-		test_piece := rand.Intn(len(peer.torrent.pieces))
-		test_offset := rand.Intn(len(peer.torrent.pieces[test_piece].blocks))
+		testPiece := rand.Intn(len(peer.torrent.pieces))
+		testOffset := rand.Intn(len(peer.torrent.pieces[testPiece].blocks))
 
-		if peer.has_piece(test_piece) /*&& !peer.made_request(test_piece, test_offset)*/ && !peer.torrent.has_block(test_piece, test_offset*BLOCK_LEN) {
-			return test_piece, test_offset
+		if peer.hasPiece(testPiece) /*&& !peer.made_request(test_piece, test_offset)*/ && !peer.torrent.hasBlock(testPiece, testOffset*BlockLen) {
+			return testPiece, testOffset
 		}
 	}
 }
 
 // Return true if peer's bitfield indicates that they have the inputed piece
-func (peer *Peer) has_piece(piece_num int) bool {
-	return (peer.bitfield[(piece_num/int(8))]>>(7-(piece_num%8)))&1 == 1
+func (peer *Peer) hasPiece(pieceNum int) bool {
+	return (peer.bitfield[(pieceNum/int(8))]>>(7-(pieceNum%8)))&1 == 1
 }

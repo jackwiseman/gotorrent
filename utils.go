@@ -6,7 +6,7 @@ import (
 )
 
 // Return a new, random 32-bit integer
-func get_transaction_id() (uint32, error) {
+func getTransactionID() (uint32, error) {
 	var b [4]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return 0, err
