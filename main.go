@@ -11,7 +11,7 @@ func main() {
 		panic(err)
 	}
 
-	defaultConns := 75
+	defaultConns := 50
 
 	// Links defined in magnet_links.go for now
 	torr := newTorrent(LINK, defaultConns)

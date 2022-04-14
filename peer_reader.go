@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"sync"
 	"time"
 )
@@ -14,13 +13,11 @@ import (
 // PeerReader reads from the peer's connection and parses the messages
 type PeerReader struct {
 	peer   *Peer
-	conn   net.Conn
 	logger *log.Logger
 }
 
 func newPeerReader(peer *Peer) *PeerReader {
 	var pr PeerReader
-	pr.conn = peer.conn
 	pr.peer = peer
 	pr.logger = log.New(peer.torrent.logFile, "[Peer Reader] "+pr.peer.ip+": ", log.Ltime|log.Lshortfile)
 	return &pr
@@ -28,23 +25,25 @@ func newPeerReader(peer *Peer) *PeerReader {
 
 func (pr *PeerReader) run(wg *sync.WaitGroup) {
 	defer func() {
-		pr.peer.status = Dead
+		if pr.peer.status != Bad {
+			pr.peer.status = Dead
+		}
 		pr.peer.pw.stop()
 		wg.Done()
 	}()
 
 	for {
 		// disconnect if we don't receive a KEEP ALIVE (or any message) for 2 minutes
-		err := pr.conn.SetReadDeadline(time.Now().Add(time.Minute * time.Duration(2)))
+		err := pr.peer.conn.SetReadDeadline(time.Now().Add(time.Minute * time.Duration(2)))
 		if err != nil {
 			panic(err)
 		}
 
 		lengthPrefixBuf := make([]byte, 4)
-		b, err := io.ReadFull(pr.peer.conn, lengthPrefixBuf)
+		_, err = io.ReadFull(pr.peer.conn, lengthPrefixBuf)
 		if err != nil {
-			pr.logger.Println(err)
-			pr.logger.Println(b)
+			// NOTE: most of these erros end up being EOF, not entirely sure why
+			// pr.logger.Println(err)
 			return
 		}
 
@@ -52,14 +51,11 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 
 		if lengthPrefix == 0 {
 			pr.logger.Println("Received KEEP ALIVE")
-			if !pr.peer.choked {
-				pr.peer.requestNewBlock()
-			}
 			continue
 		}
 
 		messageIDBuf := make([]byte, 1)
-		_, err = pr.conn.Read(messageIDBuf)
+		_, err = pr.peer.conn.Read(messageIDBuf)
 		if err != nil {
 			pr.logger.Println(err)
 			return
@@ -78,7 +74,7 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 		case Unchoke:
 			pr.logger.Println("Received UNCHOKE")
 			pr.peer.choked = false
-			go pr.peer.requestNewBlock()
+			go pr.peer.requestBlocks()
 			continue
 		case Interested:
 			pr.logger.Println("Received INTERESTED")
@@ -89,7 +85,7 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 		case Have:
 			pr.logger.Println("Received HAVE")
 			pieceIndexBuf := make([]byte, 4)
-			_, err = pr.conn.Read(pieceIndexBuf)
+			_, err = pr.peer.conn.Read(pieceIndexBuf)
 			if err != nil {
 				pr.logger.Println(err)
 				return
@@ -97,7 +93,7 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 		case Bitfield:
 			pr.logger.Println("Received BITFIELD")
 			bitfieldBuf := make([]byte, lengthPrefix-1)
-			_, err = pr.conn.Read(bitfieldBuf)
+			_, err = pr.peer.conn.Read(bitfieldBuf)
 			if err != nil {
 				pr.logger.Println(err)
 				return
@@ -109,7 +105,7 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 			// index, begin, length
 			payloadBuf := make([]byte, 12)
 
-			_, err = pr.conn.Read(payloadBuf)
+			_, err = pr.peer.conn.Read(payloadBuf)
 			if err != nil {
 				pr.logger.Println(err)
 				return
@@ -124,13 +120,13 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 			indexBuf := make([]byte, 4)
 			beginBuf := make([]byte, 4)
 
-			_, err = pr.conn.Read(indexBuf)
+			_, err = pr.peer.conn.Read(indexBuf)
 			if err != nil {
 				pr.logger.Println(err)
 				return
 			}
 
-			_, err = pr.conn.Read(beginBuf)
+			_, err = pr.peer.conn.Read(beginBuf)
 			if err != nil {
 				pr.logger.Println(err)
 				return
@@ -142,21 +138,22 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 			pr.logger.Printf("Index: %d, Begin: %d", index, begin)
 
 			blockBuf := make([]byte, lengthPrefix-9)
-			_, err = io.ReadFull(pr.conn, blockBuf)
+			_, err = io.ReadFull(pr.peer.conn, blockBuf)
 			if err != nil {
 				return
 			}
 
 			pr.peer.torrent.setBlock(index, begin, blockBuf)
+			pr.peer.requests--
 
-			go pr.peer.requestNewBlock()
+			go pr.peer.requestBlocks()
 		case Cancel:
 			pr.logger.Println("Received CANCEL")
 
 			// index, begin, length
 			payloadBuf := make([]byte, 12)
 
-			_, err = pr.conn.Read(payloadBuf)
+			_, err = pr.peer.conn.Read(payloadBuf)
 			if err != nil {
 				pr.logger.Println(err)
 				return
@@ -164,7 +161,7 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 		case Port:
 			pr.logger.Println("Received PORT")
 			listenPortBuf := make([]byte, 2)
-			_, err = pr.conn.Read(listenPortBuf)
+			_, err = pr.peer.conn.Read(listenPortBuf)
 			if err != nil {
 				pr.logger.Println(err)
 				return
@@ -172,7 +169,7 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 		case Extended:
 			pr.logger.Println("Received EXTENDED")
 			extendedIDBuf := make([]byte, 1)
-			_, err = pr.conn.Read(extendedIDBuf)
+			_, err = pr.peer.conn.Read(extendedIDBuf)
 			if err != nil {
 				pr.logger.Println(err)
 				return
@@ -184,7 +181,7 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 			}
 
 			payloadBuf := make([]byte, lengthPrefix-2)
-			_, err = io.ReadFull(pr.conn, payloadBuf)
+			_, err = io.ReadFull(pr.peer.conn, payloadBuf)
 			if err != nil {
 				return
 			}

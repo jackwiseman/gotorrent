@@ -259,8 +259,8 @@ func (torrent *Torrent) getNumBlocksInPiece() int {
 func (torrent *Torrent) checkDownloadStatus() {
 	torrent.downloadedMx.Lock()
 	if torrent.hasAllData() && !torrent.isDownloaded {
-		torrent.buildFile()
 		torrent.isDownloaded = true
+		torrent.buildFile()
 	}
 	torrent.downloadedMx.Unlock()
 }
@@ -271,12 +271,14 @@ func (torrent *Torrent) hasAllData() bool {
 			return false
 		}
 	}
+	fmt.Println("It's not here")
 
 	if torrent.getNumBlocks()%8 == 0 {
 		return true
 	}
 
-	return int(torrent.obtainedBlocks[len(torrent.obtainedBlocks)-1])>>(8-torrent.getNumBlocks()%8) == (255 >> (8 - torrent.getNumBlocks()%8))
+	fmt.Println("Or here")
+	return int(torrent.obtainedBlocks[len(torrent.obtainedBlocks)-1])>>(7-torrent.getNumBlocks()%8) == (255 >> (7 - torrent.getNumBlocks()%8))
 }
 
 func (torrent *Torrent) buildFile() {

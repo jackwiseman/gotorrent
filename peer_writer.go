@@ -2,8 +2,8 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"log"
-	"net"
 	"sync"
 	"time"
 )
@@ -13,7 +13,6 @@ const KeepAlive = uint8(0)
 
 // PeerWriter is how we write to a peer over the connection
 type PeerWriter struct {
-	conn    net.Conn
 	writer  *bufio.Writer
 	bufSize int
 	peer    *Peer
@@ -29,9 +28,8 @@ type PeerWriter struct {
 func newPeerWriter(peer *Peer) *PeerWriter {
 	var pw PeerWriter
 	pw.peer = peer
-	pw.conn = peer.conn
 	pw.bufSize = 6 // len + id + (extension id if id == 20)
-	pw.writer = bufio.NewWriterSize(pw.conn, pw.bufSize)
+	pw.writer = bufio.NewWriterSize(pw.peer.conn, pw.bufSize)
 	pw.logger = log.New(peer.torrent.logFile, "[Peer Writer] "+pw.peer.ip+": ", log.Ltime|log.Lshortfile)
 	pw.messageCh = make(chan []byte)
 	return &pw
@@ -92,9 +90,13 @@ func (pw *PeerWriter) sendMetadataRequest() {
 func (pw *PeerWriter) keepAliveScheduler() {
 	pw.keepAliveTicker = time.NewTicker(1 * time.Minute)
 	for range pw.keepAliveTicker.C {
-		_, err := pw.conn.Write([]byte{0, 0, 0, 0})
+		b, err := pw.peer.conn.Write([]byte{0, 0, 0, 0})
+		pw.logger.Println("All I said was keepalive")
 		if err != nil {
-			panic(err)
+			return
+		}
+		if b != 4 {
+			fmt.Println("WTF")
 		}
 	}
 	pw.keepAliveTicker.Stop()
@@ -118,7 +120,7 @@ func (pw *PeerWriter) run(wg *sync.WaitGroup) {
 			return
 		}
 
-		_, err := pw.conn.Write(msg)
+		_, err := pw.peer.conn.Write(msg)
 		if err != nil {
 			return
 		}

@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"net"
@@ -31,6 +30,8 @@ type Peer struct {
 	choked       bool // whether we are choked by this peer or not, will likely need a name change upon seed support
 	bitfield     []byte
 	status       int
+	requests     int // number of pieces that have been requested and not yet fulfilled
+	maxRequests  int
 
 	torrent *Torrent // associated torrent
 
@@ -53,7 +54,7 @@ func newPeer(ip string, port string, torrent *Torrent) *Peer {
 	peer.torrent = torrent
 	peer.choked = true
 	peer.logger = log.New(peer.torrent.logFile, "[Peer] "+peer.ip+": ", log.Ltime|log.Lshortfile)
-	peer.logger.SetOutput(ioutil.Discard)
+	/*	peer.logger.SetOutput(ioutil.Discard)*/
 	peer.status = Unknown // implied by default
 
 	return &peer
@@ -66,9 +67,11 @@ func (peer *Peer) String() string {
 func (peer *Peer) run(doneCh chan *Peer) {
 	defer func() { doneCh <- peer }()
 
-	peer.logger.Printf(" + %s", peer.String())
-
+	// if we are reconnecting to this peer we need to reset some variables
 	peer.status = Alive
+	peer.choked = true
+	peer.requests = 0
+	peer.logger.Printf(" + %v", peer)
 
 	err := peer.connect()
 	if err != nil {
@@ -93,7 +96,6 @@ func (peer *Peer) run(doneCh chan *Peer) {
 
 	// Drop this peer if we don't have metadata yet and they aren't equipped to send it
 	if !peer.supportsMetadataRequests() && !peer.torrent.hasAllMetadata() {
-		peer.disconnect()
 		return
 	}
 
@@ -102,9 +104,11 @@ func (peer *Peer) run(doneCh chan *Peer) {
 	wg.Add(2)
 	go peer.pr.run(&wg)
 	go peer.pw.run(&wg)
-	wg.Wait()
 
-	peer.disconnect()
+	if peer.torrent.hasAllMetadata() {
+		peer.sendInterested()
+	}
+	wg.Wait()
 }
 
 func (peer *Peer) supportsMetadataRequests() bool {
@@ -131,12 +135,12 @@ func (peer *Peer) connect() error {
 }
 
 // Sends an INTERESTED message about the given torrent so that we can be unchoked
-/*func (peer *Peer) sendInterested() {
+func (peer *Peer) sendInterested() {
 	if peer.pw == nil {
 		return
 	}
 	peer.pw.write(Message{1, Interested, nil})
-}*/
+}
 
 // send a request message to peer asking for specified block
 func (peer *Peer) requestBlock(pieceNum int, offset int) {
@@ -164,7 +168,8 @@ func (peer *Peer) disconnect() {
 	if peer.conn != nil { // need to look into this, also keeping it open
 		err := peer.conn.Close()
 		if err != nil {
-			panic(err)
+			// Doesn't really matter if the connection is already closed
+			return
 		}
 	}
 }
@@ -226,7 +231,9 @@ func (peer *Peer) performHandshake() error {
 			peer.status = Bad
 			return err
 		}
+
 		peer.setExtensions(result.Extensions)
+		peer.maxRequests = result.Requests
 
 		if result.MetadataSize != 0 && peer.torrent.metadataSize == 0 { // make sure they attached metadata size, also no reason to overwrite if we already set
 			peer.torrent.metadataSize = result.MetadataSize
@@ -273,57 +280,50 @@ func (peer *Peer) getBitfield() error {
 	return nil
 }
 
-// Request queue_size blocks from peer, so that time is not lost between each received block and each new requested one
-/*func (peer *Peer) queueBlocks(queueSize int) {
-	peer.sendInterested()
-
-	for {
-		if !peer.choked {
-			break
-		}
-	}
-
-	for i := 0; i < queueSize; i++ {
-		piece, offset := peer.getNewBlock()
-		peer.logger.Printf("- (%d, %d)", piece, offset)
-		if piece == -1 {
-			continue
-		}
-		peer.requestBlock(piece, offset)
-	}
-}*/
-
 // Send a request block message to this peer asking for a random non-downloaded block
-func (peer *Peer) requestNewBlock() {
+func (peer *Peer) requestBlocks() error {
+	// Make sure it's a good idea to request blocks
 	if !peer.torrent.hasAllMetadata() {
-		return
-	}
-	go peer.torrent.checkDownloadStatus()
-	piece, offset := peer.getNewBlock()
-	if piece == -1 {
-		return
+		return errors.New("block requested before metadata was downloaded")
 	}
 
-	peer.requestBlock(piece, offset)
-}
-
-// Return a random piece + offset pair corresponding to a non downloaded block
-// or -1, -1 in the case of all blocks already downloaded
-func (peer *Peer) getNewBlock() (int, int) {
-	rand.Seed(time.Now().UnixNano())
-	if peer.torrent.hasAllData() {
-		peer.logger.Println("Option 1")
-		return -1, -1
+	peer.torrent.checkDownloadStatus() // logic should be checked on these two lines
+	if peer.torrent.isDownloaded {
+		return errors.New("torrent is downloaded, no need to queue more blocks")
 	}
 
-	for {
-		testPiece := rand.Intn(len(peer.torrent.pieces))
-		testOffset := rand.Intn(len(peer.torrent.pieces[testPiece].blocks))
+	// Request as many blocks as we can -- first run will be maxRequests times and after it will likely only go once
+	for i := peer.requests; i < peer.maxRequests; i++ {
 
-		if peer.hasPiece(testPiece) /*&& !peer.made_request(test_piece, test_offset)*/ && !peer.torrent.hasBlock(testPiece, testOffset*BlockLen) {
-			return testPiece, testOffset
+		// Get a new random block
+		rand.Seed(time.Now().UnixNano())
+
+		var piece int
+		var offset int
+		for !peer.hasPiece(piece) && peer.torrent.hasBlock(piece, offset) {
+			piece = rand.Intn(len(peer.torrent.pieces))
+			offset = rand.Intn(len(peer.torrent.pieces[piece].blocks))
 		}
+
+		peer.logger.Printf("\nRequsting block (%d, %d)", piece, offset)
+
+		// Create message
+		payload := make([]byte, 12)
+		binary.BigEndian.PutUint32(payload[0:], uint32(piece))
+		binary.BigEndian.PutUint32(payload[4:], uint32(offset*BlockLen))
+
+		// if this is the last blocks, we need to request the correct len
+		if (piece*peer.torrent.getNumBlocksInPiece())+offset+1 == peer.torrent.getNumBlocks() {
+			binary.BigEndian.PutUint32(payload[8:], uint32(peer.torrent.metadata.Length%BlockLen))
+		} else {
+			binary.BigEndian.PutUint32(payload[8:], uint32(BlockLen))
+		}
+
+		peer.pw.write(Message{13, Request, payload})
+
+		peer.requests++
 	}
+	return nil
 }
 
 // Return true if peer's bitfield indicates that they have the inputed piece

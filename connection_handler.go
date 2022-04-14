@@ -49,6 +49,7 @@ func (ch *ConnectionHandler) run() {
 				continue
 			default:
 				ch.activeConns = append(ch.activeConns, &ch.torrent.peers[i])
+				ch.torrent.peers[i].status = Alive
 				ch.logger.Printf(" + %s", ch.torrent.peers[i].String())
 				go ch.activeConns[len(ch.activeConns)-1].run(ch.doneChan)
 			}
@@ -62,6 +63,7 @@ func (ch *ConnectionHandler) run() {
 // remove peer from the connection slice
 func (ch *ConnectionHandler) removeConnection(peer *Peer) {
 	ch.logger.Printf(" - %s", peer.String())
+	peer.disconnect()
 	if len(ch.activeConns) == 1 {
 		ch.activeConns = []*Peer{}
 	} else {
