@@ -74,7 +74,9 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 		case Unchoke:
 			pr.logger.Println("Received UNCHOKE")
 			pr.peer.choked = false
-			go pr.peer.requestBlocks()
+			if pr.peer.torrent.hasAllMetadata() {
+				go pr.peer.requestBlocks()
+			}
 			continue
 		case Interested:
 			pr.logger.Println("Received INTERESTED")
@@ -133,9 +135,14 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 			}
 
 			index := int(binary.BigEndian.Uint32(indexBuf))
-			begin := int(binary.BigEndian.Uint32(beginBuf))
+			offset := int(binary.BigEndian.Uint32(beginBuf))
 
-			pr.logger.Printf("Index: %d, Begin: %d", index, begin)
+			if offset/BlockLen > pr.peer.torrent.getNumBlocksInPiece() {
+				// got bad data
+				return
+			}
+
+			pr.logger.Printf("Index: %d, Begin: %d (%v)", index, offset, offset/BlockLen)
 
 			blockBuf := make([]byte, lengthPrefix-9)
 			_, err = io.ReadFull(pr.peer.conn, blockBuf)
@@ -143,7 +150,7 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 				return
 			}
 
-			pr.peer.torrent.setBlock(index, begin, blockBuf)
+			pr.peer.torrent.setBlock(index, offset, blockBuf)
 			pr.peer.requests--
 
 			go pr.peer.requestBlocks()
@@ -230,6 +237,7 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 			}
 		default:
 			pr.logger.Println("Received bad message_id")
+			return
 		}
 
 	}
