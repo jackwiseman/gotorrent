@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"math/rand"
@@ -237,6 +238,7 @@ func (peer *Peer) performHandshake() error {
 
 		if result.MetadataSize != 0 && peer.torrent.metadataSize == 0 { // make sure they attached metadata size, also no reason to overwrite if we already set
 			peer.torrent.metadataSize = result.MetadataSize
+			fmt.Printf("Metadata should be %v bytes\n", result.MetadataSize)
 			peer.torrent.metadataRaw = make([]byte, result.MetadataSize)
 			peer.torrent.metadataPieces = make([]byte, (peer.torrent.numMetadataPieces()+7)/8)
 			peer.logger.Println(peer.torrent.metadataPieces)
@@ -284,11 +286,13 @@ func (peer *Peer) getBitfield() error {
 func (peer *Peer) requestBlocks() error {
 	// Make sure it's a good idea to request blocks
 	if !peer.torrent.hasAllMetadata() {
+		fmt.Println("block requested before metadata was downloaded")
 		return errors.New("block requested before metadata was downloaded")
 	}
 
 	peer.torrent.checkDownloadStatus() // logic should be checked on these two lines
 	if peer.torrent.isDownloaded {
+		fmt.Println("torrent is downloaded, no need to queue more blocks")
 		return errors.New("torrent is downloaded, no need to queue more blocks")
 	}
 
@@ -298,8 +302,8 @@ func (peer *Peer) requestBlocks() error {
 		// Get a new random block
 		rand.Seed(time.Now().UnixNano())
 
-		var piece int
-		var offset int
+		piece := rand.Intn(len(peer.torrent.pieces))
+		offset := rand.Intn(len(peer.torrent.pieces[piece].blocks))
 		for !peer.hasPiece(piece) && peer.torrent.hasBlock(piece, offset) {
 			piece = rand.Intn(len(peer.torrent.pieces))
 			offset = rand.Intn(len(peer.torrent.pieces[piece].blocks))
