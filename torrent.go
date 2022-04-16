@@ -237,6 +237,9 @@ func (torrent *Torrent) setBlock(pieceIndex int, offset int, data []byte) {
 
 	blockIndex := (pieceIndex*torrent.getNumBlocksInPiece() + (offset / BlockLen))
 	setByte(&torrent.obtainedBlocks, blockIndex)
+	if byteIsSet(torrent.obtainedBlocks, blockIndex) == false {
+		fmt.Println("AAAAAAA")
+	}
 
 	torrent.numPieces++
 	torrent.progressBar.play(int64(torrent.numPieces))
@@ -247,7 +250,7 @@ func (torrent *Torrent) hasBlock(pieceIndex int, offset int) bool {
 		return false
 	}
 	blockIndex := (pieceIndex*torrent.getNumBlocksInPiece() + (offset / BlockLen))
-	return torrent.obtainedBlocks[blockIndex/8]>>(7-(blockIndex%8))&1 == 1
+	return byteIsSet(torrent.obtainedBlocks, blockIndex)
 }
 
 func (torrent *Torrent) getNumBlocks() int {
@@ -268,7 +271,7 @@ func (torrent *Torrent) checkDownloadStatus() {
 }
 
 func (torrent *Torrent) hasAllData() bool {
-	for i := 0; i < torrent.getNumBlocks(); i++ {
+	for i := 0; i < len(torrent.obtainedBlocks); i++ {
 		if !byteIsSet(torrent.obtainedBlocks, i) {
 			return false
 		}

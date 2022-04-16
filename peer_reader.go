@@ -119,6 +119,7 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 				pr.logger.Println("PIECE MESSAGE WAS TOO LONG")
 				continue
 			}
+
 			indexBuf := make([]byte, 4)
 			beginBuf := make([]byte, 4)
 

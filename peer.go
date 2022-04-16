@@ -120,6 +120,17 @@ func (peer *Peer) supportsMetadataRequests() bool {
 	return ok
 }
 
+// TODO: ensure read/write are closed
+func (peer *Peer) disconnect() {
+	if peer.conn != nil { // need to look into this, also keeping it open
+		err := peer.conn.Close()
+		if err != nil {
+			// Doesn't really matter if the connection is already closed
+			return
+		}
+	}
+}
+
 // Connect to peer via TCP and create a peer_reader over connection
 func (peer *Peer) connect() error {
 	timeout := time.Second * 10
@@ -141,38 +152,6 @@ func (peer *Peer) sendInterested() {
 		return
 	}
 	peer.pw.write(Message{1, Interested, nil})
-}
-
-// send a request message to peer asking for specified block
-func (peer *Peer) requestBlock(pieceNum int, offset int) {
-	peer.logger.Printf("\nRequsting block (%d, %d)", pieceNum, offset)
-	if peer.pw == nil {
-		return
-	}
-
-	payload := make([]byte, 12)
-	binary.BigEndian.PutUint32(payload[0:], uint32(pieceNum))
-	binary.BigEndian.PutUint32(payload[4:], uint32(offset*BlockLen))
-
-	// if this is the last blocks, we need to request the correct len
-	if (pieceNum*peer.torrent.getNumBlocksInPiece())+offset+1 == peer.torrent.getNumBlocks() {
-		binary.BigEndian.PutUint32(payload[8:], uint32(peer.torrent.metadata.Length%BlockLen))
-	} else {
-		binary.BigEndian.PutUint32(payload[8:], uint32(BlockLen))
-	}
-
-	peer.pw.write(Message{13, Request, payload})
-}
-
-// TODO: ensure read/write are closed
-func (peer *Peer) disconnect() {
-	if peer.conn != nil { // need to look into this, also keeping it open
-		err := peer.conn.Close()
-		if err != nil {
-			// Doesn't really matter if the connection is already closed
-			return
-		}
-	}
 }
 
 func (peer *Peer) performHandshake() error {
@@ -238,7 +217,6 @@ func (peer *Peer) performHandshake() error {
 
 		if result.MetadataSize != 0 && peer.torrent.metadataSize == 0 { // make sure they attached metadata size, also no reason to overwrite if we already set
 			peer.torrent.metadataSize = result.MetadataSize
-			fmt.Printf("Metadata should be %v bytes\n", result.MetadataSize)
 			peer.torrent.metadataRaw = make([]byte, result.MetadataSize)
 			peer.torrent.metadataPieces = make([]byte, (peer.torrent.numMetadataPieces()+7)/8)
 			peer.logger.Println(peer.torrent.metadataPieces)
@@ -304,12 +282,13 @@ func (peer *Peer) requestBlocks() error {
 
 		piece := rand.Intn(len(peer.torrent.pieces))
 		offset := rand.Intn(len(peer.torrent.pieces[piece].blocks))
-		for !peer.hasPiece(piece) && peer.torrent.hasBlock(piece, offset) {
+
+		for !peer.hasPiece(piece) || peer.torrent.hasBlock(piece, offset) {
 			piece = rand.Intn(len(peer.torrent.pieces))
 			offset = rand.Intn(len(peer.torrent.pieces[piece].blocks))
 		}
 
-		peer.logger.Printf("\nRequsting block (%d, %d)", piece, offset)
+		peer.logger.Printf("\nRequesting block (%d, %d)", piece, offset)
 
 		// Create message
 		payload := make([]byte, 12)
@@ -332,5 +311,6 @@ func (peer *Peer) requestBlocks() error {
 
 // Return true if peer's bitfield indicates that they have the inputed piece
 func (peer *Peer) hasPiece(pieceNum int) bool {
-	return (peer.bitfield[(pieceNum/int(8))]>>(7-(pieceNum%8)))&1 == 1
+	return byteIsSet(peer.bitfield, pieceNum)
+	//	return (peer.bitfield[(pieceNum/int(8))]>>(7-(pieceNum%8)))&1 == 1
 }
