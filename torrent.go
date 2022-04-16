@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"math"
 	"os"
 	"strconv"
@@ -43,6 +44,18 @@ type Torrent struct {
 
 	connHandler *ConnectionHandler
 	progressBar Bar
+
+	pieceCH chan BlockData
+
+	logger *log.Logger
+}
+
+// TODO: not to be confused with Block
+// BlockData is is the type that is sent through a pieceCH when a peer sends a block
+type BlockData struct {
+	piece  int
+	offset int
+	data   []byte
 }
 
 // for simplicity, only magnet links will be supportd for no
@@ -53,6 +66,9 @@ func newTorrent(magnetLink string, maxPeers int) *Torrent {
 	torrent.maxPeers = maxPeers
 	torrent.parseMagnetLink()
 	torrent.connHandler = torrent.newConnHandler()
+	torrent.isDownloaded = false
+	torrent.logger = log.New(torrent.logFile, "[Torrent Info]: ", log.Ltime)
+	torrent.pieceCH = make(chan BlockData)
 
 	return &torrent
 }
@@ -209,6 +225,8 @@ func (torrent *Torrent) parseMetadataFile() error {
 	torrent.pieces[len(torrent.pieces)-1].blocks = make([]Block, int(math.Ceil(float64(torrent.metadata.Length-(torrent.metadata.PieceLen*(len(torrent.pieces)-1)))/float64(BlockLen))))
 	torrent.obtainedBlocks = make([]byte, int(math.Ceil(float64(torrent.getNumBlocks())/float64(8))))
 
+	go torrent.blockHandler()
+
 	torrent.progressBar.newOption(0, int64(torrent.getNumBlocks()))
 	return nil
 }
@@ -225,24 +243,28 @@ func (torrent *Torrent) startDownload() {
 	torrent.String()
 }
 
-func (torrent *Torrent) setBlock(pieceIndex int, offset int, data []byte) {
-	defer torrent.numPiecesMx.Unlock()
-	torrent.numPiecesMx.Lock()
+func (torrent *Torrent) blockHandler() {
+	torrent.logger.Println("Started the blockHandler")
+	for {
+		ch := <-torrent.pieceCH
+		torrent.logger.Println("AIIII")
+		if torrent.hasBlock(ch.piece, ch.offset) {
+			continue
+		}
 
-	if torrent.hasBlock(pieceIndex, offset) {
-		return
+		torrent.logger.Println("Block received")
+		// Set this data
+		torrent.pieces[ch.piece].blocks[ch.offset/BlockLen].data = ch.data
+
+		// Mark this block as 'have'
+		blockIndex := (ch.piece*torrent.getNumBlocksInPiece() + (ch.offset / BlockLen))
+		setByte(&torrent.obtainedBlocks, blockIndex)
+
+		torrent.numPieces++
+
+		// Update progress bar
+		torrent.progressBar.play(int64(torrent.numPieces))
 	}
-
-	torrent.pieces[pieceIndex].blocks[offset/BlockLen].data = data
-
-	blockIndex := (pieceIndex*torrent.getNumBlocksInPiece() + (offset / BlockLen))
-	setByte(&torrent.obtainedBlocks, blockIndex)
-	if byteIsSet(torrent.obtainedBlocks, blockIndex) == false {
-		fmt.Println("AAAAAAA")
-	}
-
-	torrent.numPieces++
-	torrent.progressBar.play(int64(torrent.numPieces))
 }
 
 func (torrent *Torrent) hasBlock(pieceIndex int, offset int) bool {
@@ -265,6 +287,7 @@ func (torrent *Torrent) checkDownloadStatus() {
 	torrent.downloadedMx.Lock()
 	if torrent.hasAllData() && !torrent.isDownloaded {
 		torrent.isDownloaded = true
+		fmt.Println(torrent.obtainedBlocks)
 		torrent.buildFile()
 	}
 	torrent.downloadedMx.Unlock()

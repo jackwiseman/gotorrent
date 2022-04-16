@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io"
 	"log"
 )
 
@@ -22,12 +21,12 @@ func (torrent *Torrent) newConnHandler() *ConnectionHandler {
 	ch.torrent = torrent
 	ch.doneChan = make(chan *Peer)
 	ch.logger = log.New(torrent.logFile, "[Connection Handler] ", log.Ltime|log.Lshortfile)
-	ch.logger.SetOutput(io.Discard)
+	//	ch.logger.SetOutput(io.Discard)
 	return &ch
 }
 
 func (ch *ConnectionHandler) run() {
-	defer ch.logger.Println("Finished running")
+	//	defer ch.logger.Println("Finished running")
 
 	for {
 		badPeers := 0
@@ -50,19 +49,19 @@ func (ch *ConnectionHandler) run() {
 			default:
 				ch.activeConns = append(ch.activeConns, &ch.torrent.peers[i])
 				ch.torrent.peers[i].status = Alive
-				ch.logger.Printf(" + %s", ch.torrent.peers[i].String())
+				//				ch.logger.Printf(" + %s", ch.torrent.peers[i].String())
 				go ch.activeConns[len(ch.activeConns)-1].run(ch.doneChan)
 			}
 		}
-		ch.logger.Printf("Bad: %d Alive: %d Total: %d\n", badPeers, alivePeers, len(ch.torrent.peers))
-		ch.logger.Println("------------------------")
+		//		ch.logger.Printf("Bad: %d Alive: %d Total: %d\n", badPeers, alivePeers, len(ch.torrent.peers))
+		//		ch.logger.Println("------------------------")
 		ch.removeConnection(<-ch.doneChan) // block until someone disconnects
 	}
 }
 
 // remove peer from the connection slice
 func (ch *ConnectionHandler) removeConnection(peer *Peer) {
-	ch.logger.Printf(" - %s", peer.String())
+	//	ch.logger.Printf(" - %s", peer.String())
 	peer.disconnect()
 	if len(ch.activeConns) == 1 {
 		ch.activeConns = []*Peer{}

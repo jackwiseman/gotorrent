@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -48,7 +47,6 @@ func (pw *PeerWriter) writeExtended(message ExtendedMessage) {
 }
 
 func (pw *PeerWriter) stop() {
-	defer pw.logger.Println("Closed")
 	pw.write(Message{1, Stop, nil})
 	if pw.keepAliveTicker != nil {
 		pw.keepAliveTicker.Stop()
@@ -60,9 +58,7 @@ func (pw *PeerWriter) stop() {
 
 // request specified metadata piece
 func (pw *PeerWriter) sendMetadataRequest() {
-	pw.logger.Println("Sending metadata request")
 	piece := pw.peer.torrent.getRandMetadataPiece()
-	//	fmt.Println(piece)
 	payload := encodeMetadataRequest(piece)
 	// marshall will ensure the length_prefix is set, we don't need to specify it here
 	pw.writeExtended(ExtendedMessage{0, 20, uint8(pw.peer.extensions["ut_metadata"]), []byte(payload)})
@@ -80,7 +76,6 @@ func (pw *PeerWriter) sendMetadataRequest() {
 // 			return
 // 		} else {
 // 			if pw.peer.supportsMetadataRequests() {
-// 				pw.logger.Println("Requesting metadata")
 // 				pw.sendMetadataRequest()
 // 			}
 // 		}
@@ -90,13 +85,9 @@ func (pw *PeerWriter) sendMetadataRequest() {
 func (pw *PeerWriter) keepAliveScheduler() {
 	pw.keepAliveTicker = time.NewTicker(1 * time.Minute)
 	for range pw.keepAliveTicker.C {
-		b, err := pw.peer.conn.Write([]byte{0, 0, 0, 0})
-		pw.logger.Println("All I said was keepalive")
+		_, err := pw.peer.conn.Write([]byte{0, 0, 0, 0})
 		if err != nil {
 			return
-		}
-		if b != 4 {
-			fmt.Println("WTF")
 		}
 	}
 	pw.keepAliveTicker.Stop()
@@ -107,14 +98,12 @@ func (pw *PeerWriter) run(wg *sync.WaitGroup) {
 
 	go pw.keepAliveScheduler()
 
-	pw.logger.Println(pw.peer.torrent.hasAllMetadata())
 	if !pw.peer.torrent.hasAllMetadata() {
 		go pw.sendMetadataRequest()
 	}
 
 	for {
 		msg := <-pw.messageCh
-		pw.logger.Println(msg)
 
 		if int(msg[4]) == Stop {
 			return

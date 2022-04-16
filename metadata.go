@@ -95,7 +95,7 @@ func (torrent *Torrent) buildMetadataFile() error {
 	err := os.WriteFile("metadata.torrent", torrent.metadataRaw, 0644)
 	fmt.Println("Received metadata")
 	if err != nil {
-		return err
+		panic(err)
 	}
 	return nil
 }

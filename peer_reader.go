@@ -43,14 +43,12 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 		_, err = io.ReadFull(pr.peer.conn, lengthPrefixBuf)
 		if err != nil {
 			// NOTE: most of these erros end up being EOF, not entirely sure why
-			// pr.logger.Println(err)
 			return
 		}
 
 		lengthPrefix := int(binary.BigEndian.Uint32(lengthPrefixBuf))
 
 		if lengthPrefix == 0 {
-			pr.logger.Println("Received KEEP ALIVE")
 			continue
 		}
 
@@ -63,29 +61,22 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 
 		messageID := int(messageIDBuf[0])
 
-		pr.logger.Printf("Message received - Length: %d, Message_id: %d\n", lengthPrefix, messageID)
-
 		switch int(messageID) {
 		// no payload
 		case Choke:
-			pr.logger.Println("Received CHOKE")
 			pr.peer.choked = true
 			continue
 		case Unchoke:
-			pr.logger.Println("Received UNCHOKE")
 			pr.peer.choked = false
 			if pr.peer.torrent.hasAllMetadata() {
 				go pr.peer.requestBlocks()
 			}
 			continue
 		case Interested:
-			pr.logger.Println("Received INTERESTED")
 			continue
 		case NotInterested:
-			pr.logger.Println("Received NOT INTERESTED")
 			continue
 		case Have:
-			pr.logger.Println("Received HAVE")
 			pieceIndexBuf := make([]byte, 4)
 			_, err = pr.peer.conn.Read(pieceIndexBuf)
 			if err != nil {
@@ -93,7 +84,6 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 				return
 			}
 		case Bitfield:
-			pr.logger.Println("Received BITFIELD")
 			bitfieldBuf := make([]byte, lengthPrefix-1)
 			_, err = pr.peer.conn.Read(bitfieldBuf)
 			if err != nil {
@@ -102,8 +92,6 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 			}
 			pr.peer.bitfield = bitfieldBuf
 		case Request:
-			pr.logger.Println("Received REQUEST")
-
 			// index, begin, length
 			payloadBuf := make([]byte, 12)
 
@@ -113,10 +101,7 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 				return
 			}
 		case PIECE:
-			pr.logger.Println("Received PIECE")
-
 			if lengthPrefix > BlockLen+9 {
-				pr.logger.Println("PIECE MESSAGE WAS TOO LONG")
 				continue
 			}
 
@@ -151,12 +136,13 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 				return
 			}
 
-			pr.peer.torrent.setBlock(index, offset, blockBuf)
+			block := BlockData{index, offset, blockBuf}
+			pr.peer.torrent.pieceCH <- block
+			//			pr.peer.torrent.setBlock(index, offset, blockBuf)
 			pr.peer.requests--
 
 			go pr.peer.requestBlocks()
 		case Cancel:
-			pr.logger.Println("Received CANCEL")
 
 			// index, begin, length
 			payloadBuf := make([]byte, 12)
@@ -167,7 +153,6 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 				return
 			}
 		case Port:
-			pr.logger.Println("Received PORT")
 			listenPortBuf := make([]byte, 2)
 			_, err = pr.peer.conn.Read(listenPortBuf)
 			if err != nil {
@@ -175,7 +160,6 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 				return
 			}
 		case Extended:
-			pr.logger.Println("Received EXTENDED")
 			extendedIDBuf := make([]byte, 1)
 			_, err = pr.peer.conn.Read(extendedIDBuf)
 			if err != nil {
@@ -184,7 +168,7 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 			}
 
 			if extendedIDBuf[0] != uint8(0) {
-				pr.logger.Println("Received unsupported extended message")
+				// Unsupported message type
 				continue
 			}
 
@@ -200,7 +184,6 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 			response := decodeMetadataRequest(bencode)
 
 			if response.MsgType == 2 { // reject
-				pr.logger.Println("Peer does not have requested metadata piece")
 				continue
 			}
 
@@ -237,7 +220,6 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 				pr.peer.pw.sendMetadataRequest()
 			}
 		default:
-			pr.logger.Println("Received bad message_id")
 			return
 		}
 

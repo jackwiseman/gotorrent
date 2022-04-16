@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"math/rand"
@@ -76,21 +75,21 @@ func (peer *Peer) run(doneCh chan *Peer) {
 
 	err := peer.connect()
 	if err != nil {
-		peer.logger.Println("Connection error: " + err.Error())
+		//		peer.logger.Println("Connection error: " + err.Error())
 		peer.status = Bad
 		return
 	}
 
 	err = peer.performHandshake()
 	if err != nil {
-		peer.logger.Println("Handshake error: " + err.Error())
+		//		peer.logger.Println("Handshake error: " + err.Error())
 		peer.status = Bad
 		return
 	}
 
 	err = peer.getBitfield()
 	if err != nil {
-		peer.logger.Println("Bitfield error: " + err.Error())
+		//		peer.logger.Println("Bitfield error: " + err.Error())
 		peer.status = Bad
 		return
 	}
@@ -219,8 +218,6 @@ func (peer *Peer) performHandshake() error {
 			peer.torrent.metadataSize = result.MetadataSize
 			peer.torrent.metadataRaw = make([]byte, result.MetadataSize)
 			peer.torrent.metadataPieces = make([]byte, (peer.torrent.numMetadataPieces()+7)/8)
-			peer.logger.Println(peer.torrent.metadataPieces)
-			peer.logger.Println(peer.torrent.numMetadataPieces())
 		}
 	}
 	return nil
@@ -245,7 +242,6 @@ func (peer *Peer) getBitfield() error {
 	messageID := int(messageIDBuf[0])
 
 	if messageID != Bitfield {
-		peer.logger.Printf("Unexpected BITFIELD: length: %d, id: %d", lengthPrefix, messageID)
 		return errors.New("got unexpected message from peer, expecting BITFIELD")
 	}
 
@@ -256,7 +252,6 @@ func (peer *Peer) getBitfield() error {
 	}
 
 	peer.bitfield = bitfieldBuf
-	peer.logger.Println(peer.bitfield)
 	return nil
 }
 
@@ -264,13 +259,12 @@ func (peer *Peer) getBitfield() error {
 func (peer *Peer) requestBlocks() error {
 	// Make sure it's a good idea to request blocks
 	if !peer.torrent.hasAllMetadata() {
-		fmt.Println("block requested before metadata was downloaded")
 		return errors.New("block requested before metadata was downloaded")
 	}
 
 	peer.torrent.checkDownloadStatus() // logic should be checked on these two lines
 	if peer.torrent.isDownloaded {
-		fmt.Println("torrent is downloaded, no need to queue more blocks")
+		panic("torrent is downloaded, no need to queue more blocks")
 		return errors.New("torrent is downloaded, no need to queue more blocks")
 	}
 
@@ -283,7 +277,10 @@ func (peer *Peer) requestBlocks() error {
 		piece := rand.Intn(len(peer.torrent.pieces))
 		offset := rand.Intn(len(peer.torrent.pieces[piece].blocks))
 
-		for !peer.hasPiece(piece) || peer.torrent.hasBlock(piece, offset) {
+		for {
+			if peer.hasPiece(piece) && !peer.torrent.hasBlock(piece, offset) {
+				break
+			}
 			piece = rand.Intn(len(peer.torrent.pieces))
 			offset = rand.Intn(len(peer.torrent.pieces[piece].blocks))
 		}
