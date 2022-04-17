@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bytes"
-	"crypto/sha1"
 	"errors"
 	"fmt"
 	"math"
@@ -44,7 +42,7 @@ func (torrent *Torrent) hasAllMetadata() bool {
 	}
 
 	for i := 0; i < torrent.numMetadataPieces(); i++ {
-		if !byteIsSet(torrent.metadataPieces, i) {
+		if !bitIsSet(torrent.metadataPieces, i) {
 			return false
 		}
 	}
@@ -70,7 +68,7 @@ func (torrent *Torrent) hasMetadataPiece(pieceNum int) bool {
 	if len(torrent.metadataPieces) == 0 {
 		return false
 	}
-	return byteIsSet(torrent.metadataPieces, pieceNum)
+	return bitIsSet(torrent.metadataPieces, pieceNum)
 }
 
 func (torrent *Torrent) setMetadataPiece(pieceNum int, metadataPiece []byte) error {
@@ -88,17 +86,12 @@ func (torrent *Torrent) setMetadataPiece(pieceNum int, metadataPiece []byte) err
 	torrent.metadataRaw = append(torrent.metadataRaw, temp...)
 
 	// set as "have"
-	setByte(&torrent.metadataPieces, pieceNum)
+	setBit(&torrent.metadataPieces, pieceNum)
 
 	return nil
 }
 
 func (torrent *Torrent) buildMetadataFile() error {
-	checksum := sha1.Sum(torrent.metadataRaw)
-	if bytes.Compare(checksum[:], torrent.infoHash) != 0 {
-		panic("bad metadata")
-	}
-
 	err := os.WriteFile("metadata.torrent", torrent.metadataRaw, 0644)
 	fmt.Println("Received metadata")
 	if err != nil {

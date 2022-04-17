@@ -59,9 +59,9 @@ type MetadataRequest struct {
 
 // MetadataResponse is the response we get from a MetadataRequest
 type MetadataResponse struct {
-	MsgType   int
-	Piece     int
-	TotalSize int
+	MsgType   int `bencode:"msg_type"`
+	Piece     int `bencode:"piece"`
+	TotalSize int `bencode:"total_size"`
 }
 
 func (message *Message) marshall() []byte {

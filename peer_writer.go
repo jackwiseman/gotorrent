@@ -64,24 +64,6 @@ func (pw *PeerWriter) sendMetadataRequest() {
 	pw.writeExtended(ExtendedMessage{0, 20, uint8(pw.peer.extensions["ut_metadata"]), []byte(payload)})
 }
 
-// use a time.Ticker to repeatedly request a metadata piece until we have the full file
-// todo make sure mutexes are used when checking pieces
-// func (pw *PeerWriter) metadataRequestScheduler() {
-// 	pw.metadataRequestTicker = time.NewTicker(15 * time.Second)
-// 	for range pw.metadataRequestTicker.C {
-// 		if pw.peer.torrent.hasAllMetadata() {
-// 			pw.metadataRequestTicker.Stop()
-// 			go pw.peer.requestNewBlock()
-// 			// go pw.peer.queue_blocks()
-// 			return
-// 		} else {
-// 			if pw.peer.supportsMetadataRequests() {
-// 				pw.sendMetadataRequest()
-// 			}
-// 		}
-// 	}
-// }
-
 func (pw *PeerWriter) keepAliveScheduler() {
 	pw.keepAliveTicker = time.NewTicker(1 * time.Minute)
 	for range pw.keepAliveTicker.C {
@@ -98,7 +80,7 @@ func (pw *PeerWriter) run(wg *sync.WaitGroup) {
 
 	go pw.keepAliveScheduler()
 
-	if !pw.peer.torrent.hasAllMetadata() {
+	if !pw.peer.torrent.hasMetadata {
 		go pw.sendMetadataRequest()
 	}
 

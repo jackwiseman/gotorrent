@@ -15,9 +15,14 @@ func main() {
 	// size := 2
 	// b := make([]byte, size)
 	// for i := 0; i < 8*size; i++ {
-	// 	setByte(&b, i)
-	// 	fmt.Printf("%v %v\n", b, byteIsSet(b, i))
+	// 	setBit(&b, i)
+	// 	fmt.Printf("%v %v\n", b, bitIsSet(b, i))
 	// }
+	// for i := 0; i < 8*size; i++ {
+	// 	unsetBit(&b, i)
+	// 	fmt.Printf("%v %v\n", b, bitIsSet(b, i))
+	// }
+
 	defaultConns := 50
 
 	// Links defined in magnet_links.go for now

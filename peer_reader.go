@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"log"
 	"sync"
@@ -68,7 +67,7 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 			continue
 		case Unchoke:
 			pr.peer.choked = false
-			if pr.peer.torrent.hasAllMetadata() {
+			if pr.peer.torrent.hasMetadata {
 				go pr.peer.requestBlocks()
 			}
 			continue
@@ -136,8 +135,8 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 				return
 			}
 
-			block := BlockData{index, offset, blockBuf}
-			pr.peer.torrent.pieceCH <- block
+			block := TorrentBlock{index, offset, blockBuf}
+			pr.peer.torrent.torrentBlockCH <- block
 			//			pr.peer.torrent.setBlock(index, offset, blockBuf)
 			pr.peer.requests--
 
@@ -186,40 +185,17 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 				return
 			}
 
-			if response.MsgType == 2 { // reject
+			if response.MsgType == 2 || response.MsgType == 0 { // reject || request
 				continue
 			}
 
 			metadataPiece := payloadBuf[bencodeEnd:]
 
-			// ensure metadata is built once and only once
-			pr.peer.torrent.metadataMx.Lock()
+			pr.logger.Println(string(bencode))
 
-			beforeAppend := pr.peer.torrent.hasAllMetadata()
-			if beforeAppend {
-				continue
-			}
+			pr.peer.torrent.metadataPieceCH <- MetadataPiece{response.Piece, metadataPiece}
 
-			err = pr.peer.torrent.setMetadataPiece(response.Piece, metadataPiece)
-			if err != nil {
-				fmt.Println(err)
-			}
-
-			if beforeAppend != pr.peer.torrent.hasAllMetadata() { // true iff we inserted the last piece
-				err = pr.peer.torrent.buildMetadataFile()
-				if err != nil {
-					pr.logger.Println(err)
-					return
-				}
-				err = pr.peer.torrent.parseMetadataFile()
-				if err != nil {
-					pr.logger.Println(err)
-					return
-				}
-			}
-
-			pr.peer.torrent.metadataMx.Unlock()
-			if !pr.peer.torrent.hasAllMetadata() {
+			if !pr.peer.torrent.hasMetadata {
 				pr.peer.pw.sendMetadataRequest()
 			}
 		default:

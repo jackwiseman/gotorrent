@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
@@ -37,7 +38,8 @@ type Torrent struct {
 	numPiecesMx         sync.Mutex
 	numBlocksDownloaded int
 
-	isDownloaded bool
+	isDownloaded bool // set to true when torrent has all blocks downloaded
+	hasMetadata  bool // set to true once metadata is built
 	downloadedMx sync.Mutex
 
 	logFile *os.File
@@ -45,17 +47,24 @@ type Torrent struct {
 	connHandler *ConnectionHandler
 	progressBar Bar
 
-	pieceCH chan BlockData
+	torrentBlockCH  chan TorrentBlock
+	metadataPieceCH chan MetadataPiece
 
 	logger *log.Logger
 }
 
-// TODO: not to be confused with Block
-// BlockData is is the type that is sent through a pieceCH when a peer sends a block
-type BlockData struct {
-	piece  int
-	offset int
-	data   []byte
+// TODO: update names to avoid confusion
+// TorrentBlock is is the type that is sent through a torrentBlockCH when a peer sends a block
+type TorrentBlock struct {
+	pieceIndex int
+	offset     int
+	data       []byte
+}
+
+// MetadataPiece is the type which is sent through a metadataPieceCH when a peer sends a metadata piece
+type MetadataPiece struct {
+	pieceIndex int
+	data       []byte
 }
 
 // for simplicity, only magnet links will be supportd for no
@@ -68,7 +77,8 @@ func newTorrent(magnetLink string, maxPeers int) *Torrent {
 	torrent.connHandler = torrent.newConnHandler()
 	torrent.isDownloaded = false
 	torrent.logger = log.New(torrent.logFile, "[Torrent Info]: ", log.Ltime)
-	torrent.pieceCH = make(chan BlockData)
+	torrent.torrentBlockCH = make(chan TorrentBlock)
+	torrent.metadataPieceCH = make(chan MetadataPiece)
 
 	return &torrent
 }
@@ -226,9 +236,8 @@ func (torrent *Torrent) parseMetadataFile() error {
 
 	torrent.obtainedBlocks = make([]byte, int(math.Ceil(float64(torrent.getNumBlocks())/float64(8))))
 
-	go torrent.blockHandler()
-
 	torrent.progressBar.newOption(0, int64(torrent.getNumBlocks()))
+
 	return nil
 }
 
@@ -237,28 +246,31 @@ func (torrent *Torrent) startDownload() {
 	// get num_want peers and store in masterlist of peers
 	torrent.findPeers()
 
-	// eventually this will be backgrounded but ok to just connect for now
+	// prepare listeners
+	go torrent.metadataPieceHandler()
+	go torrent.torrentBlockHandler()
 
+	// eventually this will be backgrounded but ok to just connect for now
 	torrent.connHandler.run()
 
 	torrent.String()
 }
 
-func (torrent *Torrent) blockHandler() {
+func (torrent *Torrent) torrentBlockHandler() {
 	for {
-		ch := <-torrent.pieceCH
-		if torrent.hasBlock(ch.piece, ch.offset) {
+		ch := <-torrent.torrentBlockCH
+		if torrent.hasBlock(ch.pieceIndex, ch.offset) {
 			torrent.logger.Println("Bad block")
 			continue
 		}
 
 		torrent.logger.Println("Block received")
 		// Set this data
-		torrent.pieces[ch.piece].blocks[ch.offset/BlockLen].data = ch.data
+		torrent.pieces[ch.pieceIndex].blocks[ch.offset/BlockLen].data = ch.data
 
 		// Mark this block as 'have'
-		blockIndex := (ch.piece*torrent.getNumBlocksInPiece() + (ch.offset / BlockLen))
-		setByte(&torrent.obtainedBlocks, blockIndex)
+		blockIndex := (ch.pieceIndex*torrent.getNumBlocksInPiece() + (ch.offset / BlockLen))
+		setBit(&torrent.obtainedBlocks, blockIndex)
 
 		torrent.numBlocksDownloaded++
 
@@ -267,16 +279,48 @@ func (torrent *Torrent) blockHandler() {
 	}
 }
 
+func (torrent *Torrent) metadataPieceHandler() {
+	for {
+		ch := <-torrent.metadataPieceCH
+		if torrent.hasMetadata {
+			continue
+		}
+		if torrent.hasMetadataPiece(ch.pieceIndex) {
+			continue
+		}
+
+		torrent.setMetadataPiece(ch.pieceIndex, ch.data)
+
+		if !torrent.hasAllMetadata() {
+			continue
+		}
+
+		// check sha1 infohash
+		checksum := sha1.Sum(torrent.metadataRaw)
+		if bytes.Compare(checksum[:], torrent.infoHash) != 0 {
+			fmt.Println("Metadata failed infohash check, retrying")
+			for i := 0; i < torrent.numMetadataPieces(); i++ {
+				unsetBit(&torrent.metadataRaw, i)
+			}
+			continue
+		}
+
+		torrent.buildMetadataFile()
+		torrent.parseMetadataFile()
+		torrent.hasMetadata = true
+	}
+}
+
 // hasBlock returns whether block at pieceIndex (zero indexed piece) with offset offset in bytes is set
 func (torrent *Torrent) hasBlock(pieceIndex int, offset int) bool {
-	//	fmt.Println(pieceIndex, offset)
 	if torrent.obtainedBlocks == nil {
 		return false
 	}
 	blockIndex := (pieceIndex*torrent.getNumBlocksInPiece() + (offset / BlockLen))
-	return byteIsSet(torrent.obtainedBlocks, blockIndex)
+	return bitIsSet(torrent.obtainedBlocks, blockIndex)
 }
 
+// Get total number of blocks with with given block length size
 func (torrent *Torrent) getNumBlocks() int {
 	return (torrent.metadata.Length + BlockLen - 1) / BlockLen
 }

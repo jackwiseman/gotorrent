@@ -96,7 +96,7 @@ func (peer *Peer) run(doneCh chan *Peer) {
 	}
 
 	// Drop this peer if we don't have metadata yet and they aren't equipped to send it
-	if !peer.supportsMetadataRequests() && !peer.torrent.hasAllMetadata() {
+	if !peer.supportsMetadataRequests() && !peer.torrent.hasMetadata {
 		return
 	}
 
@@ -106,7 +106,7 @@ func (peer *Peer) run(doneCh chan *Peer) {
 	go peer.pr.run(&wg)
 	go peer.pw.run(&wg)
 
-	if peer.torrent.hasAllMetadata() {
+	if peer.torrent.hasMetadata {
 		peer.sendInterested()
 	}
 	wg.Wait()
@@ -251,15 +251,15 @@ func (peer *Peer) getBitfield() error {
 	if err != nil {
 		return err
 	}
-
 	peer.bitfield = bitfieldBuf
+	peer.logger.Println(peer.bitfield)
 	return nil
 }
 
 // Send a request block message to this peer asking for a random non-downloaded block
 func (peer *Peer) requestBlocks() error {
 	// Make sure it's a good idea to request blocks
-	if !peer.torrent.hasAllMetadata() {
+	if !peer.torrent.hasMetadata {
 		return errors.New("block requested before metadata was downloaded")
 	}
 
@@ -312,6 +312,6 @@ func (peer *Peer) requestBlocks() error {
 
 // Return true if peer's bitfield indicates that they have the inputed piece
 func (peer *Peer) hasPiece(pieceNum int) bool {
-	return byteIsSet(peer.bitfield, pieceNum)
+	return bitIsSet(peer.bitfield, pieceNum)
 	//	return (peer.bitfield[(pieceNum/int(8))]>>(7-(pieceNum%8)))&1 == 1
 }
