@@ -19,7 +19,7 @@ import (
 type Torrent struct {
 	magLink  string
 	name     string
-	infoHash []byte
+	infoHash []byte // Sha1 hash with const size 20
 
 	trackers []Tracker
 	peers    []Peer // all peers collected by the tracker, not necessarily connected
@@ -32,10 +32,10 @@ type Torrent struct {
 	metadata       Metadata
 	metadataMx     sync.Mutex // to ensure that that we only trigger "building" the metadata once
 
-	pieces         []Piece
-	obtainedBlocks []byte // similar to 'metadata pieces', allows for quick bitwise checking which pieces we have, if the ith bit is set to 1 we have that block
-	numPiecesMx    sync.Mutex
-	numPieces      int
+	pieces              []Piece
+	obtainedBlocks      []byte // similar to 'metadata pieces', allows for quick bitwise checking which pieces we have, if the ith bit is set to 1 we have that block
+	numPiecesMx         sync.Mutex
+	numBlocksDownloaded int
 
 	isDownloaded bool
 	downloadedMx sync.Mutex
@@ -223,6 +223,7 @@ func (torrent *Torrent) parseMetadataFile() error {
 		torrent.pieces[i].blocks = make([]Block, torrent.metadata.PieceLen/(BlockLen))
 	}
 	torrent.pieces[len(torrent.pieces)-1].blocks = make([]Block, int(math.Ceil(float64(torrent.metadata.Length-(torrent.metadata.PieceLen*(len(torrent.pieces)-1)))/float64(BlockLen))))
+
 	torrent.obtainedBlocks = make([]byte, int(math.Ceil(float64(torrent.getNumBlocks())/float64(8))))
 
 	go torrent.blockHandler()
@@ -259,10 +260,10 @@ func (torrent *Torrent) blockHandler() {
 		blockIndex := (ch.piece*torrent.getNumBlocksInPiece() + (ch.offset / BlockLen))
 		setByte(&torrent.obtainedBlocks, blockIndex)
 
-		torrent.numPieces++
+		torrent.numBlocksDownloaded++
 
 		// Update progress bar
-		torrent.progressBar.play(int64(torrent.numPieces))
+		torrent.progressBar.play(int64(torrent.numBlocksDownloaded))
 	}
 }
 
@@ -277,7 +278,7 @@ func (torrent *Torrent) hasBlock(pieceIndex int, offset int) bool {
 }
 
 func (torrent *Torrent) getNumBlocks() int {
-	return int(math.Ceil(float64(torrent.metadata.Length) / float64(BlockLen)))
+	return (torrent.metadata.Length + BlockLen - 1) / BlockLen
 }
 
 func (torrent *Torrent) getNumBlocksInPiece() int {
@@ -295,12 +296,14 @@ func (torrent *Torrent) checkDownloadStatus() {
 }
 
 func (torrent *Torrent) hasAllData() bool {
-	for i := 0; i < len(torrent.obtainedBlocks); i++ {
-		if !byteIsSet(torrent.obtainedBlocks, i) {
-			return false
+	return torrent.numBlocksDownloaded == torrent.getNumBlocks()
+	/*
+		for i := 0; i < len(torrent.obtainedBlocks); i++ {
+			if !byteIsSet(torrent.obtainedBlocks, i) {
+				return false
+			}
 		}
-	}
-	return true
+		return true*/
 }
 
 func (torrent *Torrent) buildFile() {

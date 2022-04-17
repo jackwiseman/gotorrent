@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"crypto/sha1"
 	"errors"
 	"fmt"
 	"math"
@@ -92,6 +94,11 @@ func (torrent *Torrent) setMetadataPiece(pieceNum int, metadataPiece []byte) err
 }
 
 func (torrent *Torrent) buildMetadataFile() error {
+	checksum := sha1.Sum(torrent.metadataRaw)
+	if bytes.Compare(checksum[:], torrent.infoHash) != 0 {
+		panic("bad metadata")
+	}
+
 	err := os.WriteFile("metadata.torrent", torrent.metadataRaw, 0644)
 	fmt.Println("Received metadata")
 	if err != nil {
