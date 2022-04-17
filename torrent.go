@@ -244,11 +244,10 @@ func (torrent *Torrent) startDownload() {
 }
 
 func (torrent *Torrent) blockHandler() {
-	torrent.logger.Println("Started the blockHandler")
 	for {
 		ch := <-torrent.pieceCH
-		torrent.logger.Println("AIIII")
 		if torrent.hasBlock(ch.piece, ch.offset) {
+			torrent.logger.Println("Bad block")
 			continue
 		}
 
@@ -267,7 +266,9 @@ func (torrent *Torrent) blockHandler() {
 	}
 }
 
+// hasBlock returns whether block at pieceIndex (zero indexed piece) with offset offset in bytes is set
 func (torrent *Torrent) hasBlock(pieceIndex int, offset int) bool {
+	//	fmt.Println(pieceIndex, offset)
 	if torrent.obtainedBlocks == nil {
 		return false
 	}

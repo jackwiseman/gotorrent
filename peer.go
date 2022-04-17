@@ -57,6 +57,7 @@ func newPeer(ip string, port string, torrent *Torrent) *Peer {
 	/*	peer.logger.SetOutput(ioutil.Discard)*/
 	peer.status = Unknown // implied by default
 
+	rand.Seed(time.Now().UnixNano())
 	return &peer
 }
 
@@ -262,7 +263,7 @@ func (peer *Peer) requestBlocks() error {
 		return errors.New("block requested before metadata was downloaded")
 	}
 
-	peer.torrent.checkDownloadStatus() // logic should be checked on these two lines
+	peer.torrent.checkDownloadStatus()
 	if peer.torrent.isDownloaded {
 		panic("torrent is downloaded, no need to queue more blocks")
 		return errors.New("torrent is downloaded, no need to queue more blocks")
@@ -272,18 +273,21 @@ func (peer *Peer) requestBlocks() error {
 	for i := peer.requests; i < peer.maxRequests; i++ {
 
 		// Get a new random block
-		rand.Seed(time.Now().UnixNano())
 
 		piece := rand.Intn(len(peer.torrent.pieces))
 		offset := rand.Intn(len(peer.torrent.pieces[piece].blocks))
 
 		for {
-			if peer.hasPiece(piece) && !peer.torrent.hasBlock(piece, offset) {
+			if peer.hasPiece(piece) && !peer.torrent.hasBlock(piece, offset*BlockLen) {
 				break
 			}
 			piece = rand.Intn(len(peer.torrent.pieces))
 			offset = rand.Intn(len(peer.torrent.pieces[piece].blocks))
 		}
+
+		/*		if peer.torrent.hasBlock(piece, offset) {
+				panic("fuck")
+			}*/
 
 		peer.logger.Printf("\nRequesting block (%d, %d)", piece, offset)
 

@@ -181,7 +181,10 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 			bencodeEnd := bytes.Index(payloadBuf, []byte("ee")) + 2
 			bencode := payloadBuf[0:bencodeEnd]
 
-			response := decodeMetadataRequest(bencode)
+			response, err := decodeMetadataRequest(bencode)
+			if err != nil {
+				return
+			}
 
 			if response.MsgType == 2 { // reject
 				continue
