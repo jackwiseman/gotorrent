@@ -33,15 +33,16 @@ func (md *Metadata) String() string {
 }
 
 func (torrent *Torrent) numMetadataPieces() int {
-	return int(math.Round(float64(torrent.metadataSize)/float64(BlockLen) + 1.0))
+	return int(math.Ceil(float64(torrent.metadataSize) / float64(BlockLen)))
 }
 
 func (torrent *Torrent) hasAllMetadata() bool {
 	if torrent.numMetadataPieces() == 0 {
 		return false
 	}
+
 	for i := 0; i < torrent.numMetadataPieces(); i++ {
-		if !torrent.hasMetadataPiece(i) {
+		if !bitIsSet(torrent.metadataPieces, i) {
 			return false
 		}
 	}
@@ -67,7 +68,7 @@ func (torrent *Torrent) hasMetadataPiece(pieceNum int) bool {
 	if len(torrent.metadataPieces) == 0 {
 		return false
 	}
-	return (torrent.metadataPieces[pieceNum/int(7)]>>(7-pieceNum%8))&1 == 1
+	return bitIsSet(torrent.metadataPieces, pieceNum)
 }
 
 func (torrent *Torrent) setMetadataPiece(pieceNum int, metadataPiece []byte) error {
@@ -75,7 +76,7 @@ func (torrent *Torrent) setMetadataPiece(pieceNum int, metadataPiece []byte) err
 		return nil
 	}
 	// insert into raw byte array
-	startIndex := pieceNum*BlockLen + len(metadataPiece)
+	startIndex := pieceNum * BlockLen
 	if startIndex > len(torrent.metadataRaw) {
 		return errors.New("metadata piece is out of bounds")
 	}
@@ -85,7 +86,7 @@ func (torrent *Torrent) setMetadataPiece(pieceNum int, metadataPiece []byte) err
 	torrent.metadataRaw = append(torrent.metadataRaw, temp...)
 
 	// set as "have"
-	torrent.metadataPieces[pieceNum/int(7)] = torrent.metadataPieces[pieceNum/int(7)] | (1 << (7 - pieceNum%8))
+	setBit(&torrent.metadataPieces, pieceNum)
 
 	return nil
 }
@@ -94,7 +95,7 @@ func (torrent *Torrent) buildMetadataFile() error {
 	err := os.WriteFile("metadata.torrent", torrent.metadataRaw, 0644)
 	fmt.Println("Received metadata")
 	if err != nil {
-		return err
+		panic(err)
 	}
 	return nil
 }
