@@ -229,8 +229,9 @@ func (torrent *Torrent) parseMetadataFile() error {
 
 	// create empty pieces slice
 	torrent.pieces = make([]Piece, int(math.Ceil(float64(torrent.metadata.Length)/float64(torrent.metadata.PieceLen))))
-	for i := 0; i < len(torrent.pieces)-1; i++ {
+	for i := 0; i < len(torrent.pieces); i++ {
 		torrent.pieces[i].blocks = make([]Block, torrent.metadata.PieceLen/(BlockLen))
+		torrent.pieces[i].hash = []byte(torrent.metadata.Pieces[20*i : 20*i+20])
 	}
 	torrent.pieces[len(torrent.pieces)-1].blocks = make([]Block, int(math.Ceil(float64(torrent.metadata.Length-(torrent.metadata.PieceLen*(len(torrent.pieces)-1)))/float64(BlockLen))))
 
@@ -265,14 +266,33 @@ func (torrent *Torrent) torrentBlockHandler() {
 		}
 
 		torrent.logger.Println("Block received")
-		// Set this data
+
+		// Set this data and update this piece's number of blocks
 		torrent.pieces[ch.pieceIndex].blocks[ch.offset/BlockLen].data = ch.data
+		torrent.pieces[ch.pieceIndex].numSet++
 
 		// Mark this block as 'have'
 		blockIndex := (ch.pieceIndex*torrent.getNumBlocksInPiece() + (ch.offset / BlockLen))
 		setBit(&torrent.obtainedBlocks, blockIndex)
 
 		torrent.numBlocksDownloaded++
+
+		// Verify the block if need be
+		if torrent.pieces[ch.pieceIndex].numSet == len(torrent.pieces[ch.pieceIndex].blocks) {
+			if !torrent.pieces[ch.pieceIndex].verify() {
+				// redownload this entire piece
+				for i := 0; i < len(torrent.pieces[ch.pieceIndex].blocks); i++ {
+					unsetBit(&torrent.obtainedBlocks, ch.pieceIndex*torrent.getNumBlocksInPiece()+i)
+				}
+				// reset numSet and torrent's numBlocksDownloaded
+				torrent.pieces[ch.pieceIndex].numSet = 0
+				torrent.numBlocksDownloaded -= len(torrent.pieces[ch.pieceIndex].blocks)
+
+				// update progress bar accordingly
+				torrent.progressBar.play(int64(torrent.numBlocksDownloaded))
+			}
+			torrent.pieces[ch.pieceIndex].verified = true
+		}
 
 		// Update progress bar
 		torrent.progressBar.play(int64(torrent.numBlocksDownloaded))
