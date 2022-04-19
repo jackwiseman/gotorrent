@@ -267,6 +267,11 @@ func (torrent *Torrent) torrentBlockHandler() {
 
 		torrent.logger.Println("Block received")
 
+		if ch.pieceIndex >= len(torrent.pieces) || ch.offset/BlockLen >= len(torrent.pieces[ch.pieceIndex].blocks) {
+			// bad data
+			continue
+		}
+
 		// Set this data and update this piece's number of blocks
 		torrent.pieces[ch.pieceIndex].blocks[ch.offset/BlockLen].data = ch.data
 		torrent.pieces[ch.pieceIndex].numSet++
