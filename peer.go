@@ -257,7 +257,7 @@ func (peer *Peer) getBitfield() error {
 }
 
 // Send a request block message to this peer asking for a random non-downloaded block
-func (peer *Peer) requestBlocks() error {
+func (peer *Peer) requestPieces() error {
 	// Make sure it's a good idea to request blocks
 	if !peer.torrent.hasMetadata {
 		return errors.New("block requested before metadata was downloaded")
@@ -268,39 +268,43 @@ func (peer *Peer) requestBlocks() error {
 		panic("torrent is downloaded, no need to queue more blocks")
 	}
 
-	// Request as many blocks as we can -- first run will be maxRequests times and after it will likely only go once
-	for i := peer.requests; i < peer.maxRequests; i++ {
+	// Request as many pieces as we can without exceeding the peer's maxRequests
+	for i := peer.requests; i+peer.torrent.getNumBlocksInPiece() < peer.maxRequests; i++ {
 
-		// Get a new random block
+		// Get a new random piece
 
 		piece := rand.Intn(len(peer.torrent.pieces))
-		offset := rand.Intn(len(peer.torrent.pieces[piece].blocks))
+		//		offset := rand.Intn(len(peer.torrent.pieces[piece].blocks))
 
 		for {
-			if peer.hasPiece(piece) && !peer.torrent.hasBlock(piece, offset*BlockLen) {
+			if peer.hasPiece(piece) && !peer.torrent.hasPiece(piece) {
 				break
 			}
 			piece = rand.Intn(len(peer.torrent.pieces))
-			offset = rand.Intn(len(peer.torrent.pieces[piece].blocks))
+			//offset = rand.Intn(len(peer.torrent.pieces[piece].blocks))
 		}
 
-		peer.logger.Printf("\nRequesting block (%d, %d)", piece, offset)
+		peer.logger.Printf("\nRequesting block %d", piece)
 
-		// Create message
-		payload := make([]byte, 12)
-		binary.BigEndian.PutUint32(payload[0:], uint32(piece))
-		binary.BigEndian.PutUint32(payload[4:], uint32(offset*BlockLen))
+		for offset := 0; offset < len(peer.torrent.pieces[piece].blocks); offset++ {
 
-		// if this is the last blocks, we need to request the correct len
-		if (piece*peer.torrent.getNumBlocksInPiece())+offset+1 == peer.torrent.getNumBlocks() {
-			binary.BigEndian.PutUint32(payload[8:], uint32(peer.torrent.metadata.Length%BlockLen))
-		} else {
-			binary.BigEndian.PutUint32(payload[8:], uint32(BlockLen))
+			// Create message
+
+			payload := make([]byte, 12)
+			binary.BigEndian.PutUint32(payload[0:], uint32(piece))
+			binary.BigEndian.PutUint32(payload[4:], uint32(offset*BlockLen))
+
+			// if this is the last blocks, we need to request the correct len
+			if (piece*peer.torrent.getNumBlocksInPiece())+offset+1 == peer.torrent.getNumBlocks() {
+				binary.BigEndian.PutUint32(payload[8:], uint32(peer.torrent.metadata.Length%BlockLen))
+			} else {
+				binary.BigEndian.PutUint32(payload[8:], uint32(BlockLen))
+			}
+
+			peer.pw.write(Message{13, Request, payload})
+
+			peer.requests++
 		}
-
-		peer.pw.write(Message{13, Request, payload})
-
-		peer.requests++
 	}
 	return nil
 }

@@ -68,7 +68,7 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 		case Unchoke:
 			pr.peer.choked = false
 			if pr.peer.torrent.hasMetadata {
-				go pr.peer.requestBlocks()
+				go pr.peer.requestPieces()
 			}
 			continue
 		case Interested:
@@ -142,7 +142,7 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 			//			pr.peer.torrent.setBlock(index, offset, blockBuf)
 			pr.peer.requests--
 
-			go pr.peer.requestBlocks()
+			go pr.peer.requestPieces()
 		case Cancel:
 
 			// index, begin, length
