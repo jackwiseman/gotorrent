@@ -292,9 +292,10 @@ func (torrent *Torrent) torrentBlockHandler() {
 				// reset numSet and total numBlocksDownloaded
 				torrent.pieces[ch.pieceIndex].numSet = 0
 				torrent.numBlocksDownloaded -= len(torrent.pieces[ch.pieceIndex].blocks)
+			} else {
+				torrent.pieces[ch.pieceIndex].verified = true
+				torrent.numPiecesDownloaded++
 			}
-			torrent.pieces[ch.pieceIndex].verified = true
-			torrent.numPiecesDownloaded++
 		}
 
 		// Update progress bar

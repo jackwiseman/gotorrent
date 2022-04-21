@@ -269,7 +269,7 @@ func (peer *Peer) requestPieces() error {
 	}
 
 	// Request as many pieces as we can without exceeding the peer's maxRequests
-	for i := peer.requests; i+peer.torrent.getNumBlocksInPiece() < peer.maxRequests; i++ {
+	for peer.requests+peer.torrent.getNumBlocksInPiece() < peer.maxRequests {
 
 		// Get a new random piece
 
