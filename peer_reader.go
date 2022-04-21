@@ -77,11 +77,13 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 			continue
 		case Have:
 			pieceIndexBuf := make([]byte, 4)
-			_, err = pr.peer.conn.Read(pieceIndexBuf)
+			_, err = io.ReadFull(pr.peer.conn, pieceIndexBuf)
 			if err != nil {
 				pr.logger.Println(err)
 				return
 			}
+			// A malicious peer may send a HAVE message with a piece we'll never download
+			//setBit(&pr.peer.bitfield, int(binary.BigEndian.Uint32(pieceIndexBuf)))
 		case Bitfield:
 			bitfieldBuf := make([]byte, lengthPrefix-1)
 			_, err = pr.peer.conn.Read(bitfieldBuf)

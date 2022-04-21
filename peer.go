@@ -266,7 +266,6 @@ func (peer *Peer) requestBlocks() error {
 	peer.torrent.checkDownloadStatus()
 	if peer.torrent.isDownloaded {
 		panic("torrent is downloaded, no need to queue more blocks")
-		return errors.New("torrent is downloaded, no need to queue more blocks")
 	}
 
 	// Request as many blocks as we can -- first run will be maxRequests times and after it will likely only go once
@@ -284,10 +283,6 @@ func (peer *Peer) requestBlocks() error {
 			piece = rand.Intn(len(peer.torrent.pieces))
 			offset = rand.Intn(len(peer.torrent.pieces[piece].blocks))
 		}
-
-		/*		if peer.torrent.hasBlock(piece, offset) {
-				panic("fuck")
-			}*/
 
 		peer.logger.Printf("\nRequesting block (%d, %d)", piece, offset)
 
