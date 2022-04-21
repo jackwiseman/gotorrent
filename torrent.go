@@ -38,6 +38,8 @@ type Torrent struct {
 	numBlocksDownloaded int
 	numPiecesDownloaded int
 
+	pieceQueue *PieceQueue // all outstanding pieces that have no requests
+
 	isDownloaded bool // set to true when torrent has all blocks downloaded
 	hasMetadata  bool // set to true once metadata is built
 	downloadedMx sync.Mutex
@@ -237,6 +239,8 @@ func (torrent *Torrent) parseMetadataFile() error {
 
 	torrent.obtainedBlocks = make([]byte, int(math.Ceil(float64(torrent.getNumBlocks())/float64(8))))
 
+	torrent.pieceQueue = newPieceQueue(len(torrent.pieces), true)
+
 	torrent.progressBar.newOption(0, int64(len(torrent.pieces)))
 
 	return nil
@@ -289,9 +293,10 @@ func (torrent *Torrent) torrentBlockHandler() {
 				for i := 0; i < len(torrent.pieces[ch.pieceIndex].blocks); i++ {
 					unsetBit(&torrent.obtainedBlocks, ch.pieceIndex*torrent.getNumBlocksInPiece()+i)
 				}
-				// reset numSet and total numBlocksDownloaded
+				// reset numSet and total numBlocksDownloaded, add back to pieceQueue
 				torrent.pieces[ch.pieceIndex].numSet = 0
 				torrent.numBlocksDownloaded -= len(torrent.pieces[ch.pieceIndex].blocks)
+				torrent.pieceQueue.push(ch.pieceIndex)
 			} else {
 				torrent.pieces[ch.pieceIndex].isVerified = true
 				torrent.numPiecesDownloaded++

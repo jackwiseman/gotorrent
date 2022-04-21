@@ -31,8 +31,10 @@ type Peer struct {
 	choked       bool // whether we are choked by this peer or not, will likely need a name change upon seed support
 	bitfield     []byte
 	status       int
-	requests     int // number of pieces that have been requested and not yet fulfilled
-	maxRequests  int
+
+	requests    int // number of pieces that have been requested and not yet fulfilled
+	requestsMX  sync.Mutex
+	maxRequests int
 
 	torrent *Torrent // associated torrent
 
@@ -270,7 +272,13 @@ func (peer *Peer) requestPieces() error {
 	}
 
 	// Request as many pieces as we can without exceeding the peer's maxRequests
-	for peer.requests+peer.torrent.getNumBlocksInPiece() < peer.maxRequests {
+	for {
+		peer.requestsMX.Lock()
+		if peer.requests+peer.torrent.getNumBlocksInPiece() > peer.maxRequests {
+			peer.requestsMX.Unlock()
+			break
+		}
+		peer.requestsMX.Unlock()
 
 		// Get a new random piece
 
@@ -307,7 +315,9 @@ func (peer *Peer) requestPieces() error {
 
 			peer.pw.write(Message{13, Request, payload})
 
+			peer.requestsMX.Lock()
 			peer.requests++
+			peer.requestsMX.Unlock()
 		}
 	}
 	return nil

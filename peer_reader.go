@@ -142,7 +142,9 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 			block := TorrentBlock{index, offset, blockBuf}
 			pr.peer.torrent.torrentBlockCH <- block
 			//			pr.peer.torrent.setBlock(index, offset, blockBuf)
+			pr.peer.requestsMX.Lock()
 			pr.peer.requests--
+			pr.peer.requestsMX.Unlock()
 			go pr.peer.requestPieces()
 		case Cancel:
 
