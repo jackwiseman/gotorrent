@@ -287,9 +287,12 @@ func (peer *Peer) requestPieces() error {
 		peer.logger.Printf("\nRequesting block %d", piece)
 
 		for offset := 0; offset < len(peer.torrent.pieces[piece].blocks); offset++ {
+			// Make sure we need this piece, otherwise skip it
+			if peer.torrent.hasBlock(piece, offset) {
+				continue
+			}
 
 			// Create message
-
 			payload := make([]byte, 12)
 			binary.BigEndian.PutUint32(payload[0:], uint32(piece))
 			binary.BigEndian.PutUint32(payload[4:], uint32(offset*BlockLen))
