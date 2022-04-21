@@ -295,6 +295,7 @@ func (torrent *Torrent) torrentBlockHandler() {
 			} else {
 				torrent.pieces[ch.pieceIndex].verified = true
 				torrent.numPiecesDownloaded++
+				torrent.logger.Printf("Index: %v is set\n", ch.pieceIndex)
 			}
 		}
 
@@ -344,6 +345,21 @@ func (torrent *Torrent) hasBlock(pieceIndex int, offset int) bool {
 	return bitIsSet(torrent.obtainedBlocks, blockIndex)
 }
 
+func (torrent *Torrent) hasPiece(pieceIndex int) bool {
+	if torrent.obtainedBlocks == nil {
+		return false
+	}
+	firstBlock := pieceIndex * torrent.getNumBlocksInPiece()
+	lastBlock := pieceIndex*torrent.getNumBlocksInPiece() + len(torrent.pieces[pieceIndex].blocks)
+
+	for i := firstBlock; i < lastBlock; i++ {
+		if !bitIsSet(torrent.obtainedBlocks, i) {
+			return false
+		}
+	}
+	return true
+}
+
 // Get total number of blocks with with given block length size
 func (torrent *Torrent) getNumBlocks() int {
 	return (torrent.metadata.Length + BlockLen - 1) / BlockLen
@@ -361,21 +377,6 @@ func (torrent *Torrent) checkDownloadStatus() {
 		torrent.buildFile()
 	}
 	torrent.downloadedMx.Unlock()
-}
-
-func (torrent *Torrent) hasPiece(pieceIndex int) bool {
-	if torrent.obtainedBlocks == nil {
-		return false
-	}
-	firstBlock := pieceIndex * torrent.getNumBlocksInPiece()
-	lastBlock := pieceIndex*torrent.getNumBlocksInPiece() + len(torrent.pieces[pieceIndex].blocks)
-
-	for i := firstBlock; i < lastBlock; i++ {
-		if !bitIsSet(torrent.obtainedBlocks, i) {
-			return false
-		}
-	}
-	return true
 }
 
 func (torrent *Torrent) hasAllData() bool {

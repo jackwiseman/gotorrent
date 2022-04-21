@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"net"
@@ -54,7 +55,7 @@ func newPeer(ip string, port string, torrent *Torrent) *Peer {
 	peer.torrent = torrent
 	peer.choked = true
 	peer.logger = log.New(peer.torrent.logFile, "[Peer] "+peer.ip+": ", log.Ltime|log.Lshortfile)
-	/*	peer.logger.SetOutput(ioutil.Discard)*/
+	peer.logger.SetOutput(ioutil.Discard)
 	peer.status = Unknown // implied by default
 
 	rand.Seed(time.Now().UnixNano())
@@ -288,7 +289,7 @@ func (peer *Peer) requestPieces() error {
 
 		for offset := 0; offset < len(peer.torrent.pieces[piece].blocks); offset++ {
 			// Make sure we need this piece, otherwise skip it
-			if peer.torrent.hasBlock(piece, offset) {
+			if peer.torrent.hasBlock(piece, offset*BlockLen) {
 				continue
 			}
 

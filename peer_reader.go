@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
+	"io/ioutil"
 	"log"
 	"sync"
 	"time"
@@ -19,6 +20,7 @@ func newPeerReader(peer *Peer) *PeerReader {
 	var pr PeerReader
 	pr.peer = peer
 	pr.logger = log.New(peer.torrent.logFile, "[Peer Reader] "+pr.peer.ip+": ", log.Ltime|log.Lshortfile)
+	pr.logger.SetOutput(ioutil.Discard)
 	return &pr
 }
 
