@@ -364,15 +364,23 @@ func (torrent *Torrent) checkDownloadStatus() {
 	torrent.downloadedMx.Unlock()
 }
 
+func (torrent *Torrent) hasPiece(pieceIndex int) bool {
+	if torrent.obtainedBlocks == nil {
+		return false
+	}
+	firstBlock := pieceIndex * torrent.getNumBlocksInPiece()
+	lastBlock := pieceIndex*torrent.getNumBlocksInPiece() + len(torrent.pieces[pieceIndex].blocks)
+
+	for i := firstBlock; i < lastBlock; i++ {
+		if !bitIsSet(torrent.obtainedBlocks, i) {
+			return false
+		}
+	}
+	return true
+}
+
 func (torrent *Torrent) hasAllData() bool {
 	return torrent.numBlocksDownloaded == torrent.getNumBlocks()
-	/*
-		for i := 0; i < len(torrent.obtainedBlocks); i++ {
-			if !byteIsSet(torrent.obtainedBlocks, i) {
-				return false
-			}
-		}
-		return true*/
 }
 
 func (torrent *Torrent) buildFile() {
