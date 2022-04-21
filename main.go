@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
 )
 
 func main() {
@@ -12,20 +13,22 @@ func main() {
 		fmt.Println("[WARN] no debug.log found")
 	}
 
-	// size := 2
-	// b := make([]byte, size)
-	// for i := 0; i < 8*size; i++ {
-	// 	setBit(&b, i)
-	// 	fmt.Printf("%v %v\n", b, bitIsSet(b, i))
-	// }
-	// for i := 0; i < 8*size; i++ {
-	// 	unsetBit(&b, i)
-	// 	fmt.Printf("%v %v\n", b, bitIsSet(b, i))
-	// }
+	connections := 50
+	var magnetLink string
 
-	defaultConns := 50
+	switch len(os.Args) {
+	case 2:
+		magnetLink = os.Args[1]
+	case 3:
+		magnetLink = os.Args[1]
+		connections, err = strconv.Atoi(os.Args[2])
+		if err != nil {
+			panic(err)
+		}
+	default:
+		fmt.Printf("Usage: ./main {magnet link} {optional # conections}\n")
+	}
 
-	// Links defined in magnet_links.go for now
-	torr := newTorrent(LINK, defaultConns)
+	torr := newTorrent(magnetLink, connections)
 	torr.startDownload()
 }
