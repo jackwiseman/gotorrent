@@ -20,6 +20,6 @@ With BitTorrent remaining the single largest file-sharing protocol since its ini
 - [ ] Investigate unexpected EOF on peers after a successful handshake
 - [ ] Report download speeds
 - [ ] Improve [end game](https://wiki.theory.org/BitTorrentSpecification#End_Game) algorithm
-- [ ] Ability to add magnet links as commandline argument
+- [X]  Ability to add magnet links as commandline argument
 - [ ] Write to file during download to save memory
 - [ ] Resume unfinished downloads
