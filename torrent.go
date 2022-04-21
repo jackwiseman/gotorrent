@@ -293,7 +293,7 @@ func (torrent *Torrent) torrentBlockHandler() {
 				torrent.pieces[ch.pieceIndex].numSet = 0
 				torrent.numBlocksDownloaded -= len(torrent.pieces[ch.pieceIndex].blocks)
 			} else {
-				torrent.pieces[ch.pieceIndex].verified = true
+				torrent.pieces[ch.pieceIndex].isVerified = true
 				torrent.numPiecesDownloaded++
 				torrent.logger.Printf("Index: %v is set\n", ch.pieceIndex)
 			}
@@ -345,19 +345,13 @@ func (torrent *Torrent) hasBlock(pieceIndex int, offset int) bool {
 	return bitIsSet(torrent.obtainedBlocks, blockIndex)
 }
 
+// returns whether the torrent has the hash-verified piece at index pieceIndex
 func (torrent *Torrent) hasPiece(pieceIndex int) bool {
 	if torrent.obtainedBlocks == nil {
 		return false
 	}
-	firstBlock := pieceIndex * torrent.getNumBlocksInPiece()
-	lastBlock := pieceIndex*torrent.getNumBlocksInPiece() + len(torrent.pieces[pieceIndex].blocks)
 
-	for i := firstBlock; i < lastBlock; i++ {
-		if !bitIsSet(torrent.obtainedBlocks, i) {
-			return false
-		}
-	}
-	return true
+	return torrent.pieces[pieceIndex].isVerified
 }
 
 // Get total number of blocks with with given block length size
