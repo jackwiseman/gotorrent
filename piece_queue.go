@@ -21,7 +21,6 @@ func (pq *PieceQueue) push(pieceIndex int) {
 	return
 }
 
-// return -1 if there are no more elements
 func (pq *PieceQueue) pop() (int, error) {
 	pq.piecesMX.Lock()
 	defer pq.piecesMX.Unlock()
