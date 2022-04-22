@@ -35,6 +35,7 @@ type Peer struct {
 	requests    int // number of pieces that have been requested and not yet fulfilled
 	requestsMX  sync.Mutex
 	maxRequests int
+	pieceQueue  *PieceQueue
 
 	torrent *Torrent // associated torrent
 
