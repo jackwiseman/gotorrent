@@ -323,8 +323,14 @@ func (peer *Peer) requestPieces() error {
 			binary.BigEndian.PutUint32(payload[4:], uint32(offset*BlockLen))
 
 			// if this is the last blocks, we need to request the correct len
-			if (piece*peer.torrent.getNumBlocksInPiece())+offset+1 == peer.torrent.getNumBlocks() {
-				binary.BigEndian.PutUint32(payload[8:], uint32(peer.torrent.metadata.Length%BlockLen))
+			if offset == len(peer.torrent.pieces[piece].blocks)-1 {
+				// if last piece
+				if piece == len(peer.torrent.pieces)-1 {
+					binary.BigEndian.PutUint32(payload[8:], uint32(peer.torrent.metadata.Length%BlockLen))
+				} else {
+					// if last block in piece
+					binary.BigEndian.PutUint32(payload[8:], uint32(peer.torrent.metadata.PieceLen%BlockLen))
+				}
 			} else {
 				binary.BigEndian.PutUint32(payload[8:], uint32(BlockLen))
 			}

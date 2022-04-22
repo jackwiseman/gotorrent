@@ -232,12 +232,12 @@ func (torrent *Torrent) parseMetadataFile() error {
 	// create empty pieces slice
 	torrent.pieces = make([]Piece, int(math.Ceil(float64(torrent.metadata.Length)/float64(torrent.metadata.PieceLen))))
 	for i := 0; i < len(torrent.pieces); i++ {
-		torrent.pieces[i].blocks = make([]Block, torrent.metadata.PieceLen/(BlockLen))
+		torrent.pieces[i].blocks = make([]Block, torrent.getNumBlocksInPiece())
 		torrent.pieces[i].hash = []byte(torrent.metadata.Pieces[20*i : 20*i+20])
 	}
 	torrent.pieces[len(torrent.pieces)-1].blocks = make([]Block, int(math.Ceil(float64(torrent.metadata.Length-(torrent.metadata.PieceLen*(len(torrent.pieces)-1)))/float64(BlockLen))))
 
-	torrent.obtainedBlocks = make([]byte, int(math.Ceil(float64(torrent.getNumBlocks())/float64(8))))
+	torrent.obtainedBlocks = make([]byte, (len(torrent.pieces)-1)*torrent.getNumBlocksInPiece()+len(torrent.pieces[len(torrent.pieces)-1].blocks))
 
 	torrent.pieceQueue = newPieceQueue(len(torrent.pieces), true)
 
@@ -297,6 +297,7 @@ func (torrent *Torrent) torrentBlockHandler() {
 				torrent.pieces[ch.pieceIndex].numSet = 0
 				torrent.numBlocksDownloaded -= len(torrent.pieces[ch.pieceIndex].blocks)
 				torrent.pieceQueue.push(ch.pieceIndex)
+				torrent.logger.Printf("%v failed check: \n + %v\n - %v\n", ch.pieceIndex, torrent.pieces[ch.pieceIndex].hash, torrent.pieces[ch.pieceIndex].lastHash)
 			} else {
 				torrent.pieces[ch.pieceIndex].isVerified = true
 				torrent.numPiecesDownloaded++
@@ -365,7 +366,11 @@ func (torrent *Torrent) getNumBlocks() int {
 }
 
 func (torrent *Torrent) getNumBlocksInPiece() int {
-	return torrent.metadata.PieceLen / BlockLen
+	if torrent.metadata.PieceLen%BlockLen == 0 {
+		return torrent.metadata.PieceLen / BlockLen
+	} else {
+		return torrent.metadata.PieceLen/BlockLen + 1
+	}
 }
 
 func (torrent *Torrent) checkDownloadStatus() {
