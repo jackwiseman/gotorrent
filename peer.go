@@ -60,6 +60,7 @@ func newPeer(ip string, port string, torrent *Torrent) *Peer {
 	peer.logger = log.New(peer.torrent.logFile, "[Peer] "+peer.ip+": ", log.Ltime|log.Lshortfile)
 	peer.logger.SetOutput(ioutil.Discard)
 	peer.status = Unknown // implied by default
+	peer.pieceQueue = newPieceQueue(0, false)
 
 	rand.Seed(time.Now().UnixNano())
 	return &peer
@@ -126,6 +127,10 @@ func (peer *Peer) supportsMetadataRequests() bool {
 
 // TODO: ensure read/write are closed
 func (peer *Peer) disconnect() {
+	for i := 0; i < len(peer.pieceQueue.pieces); i++ {
+		p, _ := peer.pieceQueue.pop()
+		peer.torrent.pieceQueue.push(p)
+	}
 	if peer.conn != nil { // need to look into this, also keeping it open
 		err := peer.conn.Close()
 		if err != nil {
@@ -272,6 +277,8 @@ func (peer *Peer) requestPieces() error {
 		panic("torrent is downloaded, no need to queue more blocks")
 	}
 
+	peer.updatePieceQueue()
+
 	// Request as many pieces as we can without exceeding the peer's maxRequests
 	for {
 		peer.requestsMX.Lock()
@@ -283,14 +290,22 @@ func (peer *Peer) requestPieces() error {
 
 		// Get a new random piece
 
-		piece := rand.Intn(len(peer.torrent.pieces))
+		piece, err := peer.torrent.pieceQueue.pop()
 		//		offset := rand.Intn(len(peer.torrent.pieces[piece].blocks))
 
 		for {
-			if peer.hasPiece(piece) && !peer.torrent.hasPiece(piece) {
+			if err != nil {
+				return err
+			}
+
+			if peer.hasPiece(piece) {
+				peer.pieceQueue.push(piece)
 				break
 			}
-			piece = rand.Intn(len(peer.torrent.pieces))
+
+			peer.torrent.pieceQueue.push(piece)
+			piece, err = peer.torrent.pieceQueue.pop()
+			//piece = rand.Intn(len(peer.torrent.pieces))
 			//offset = rand.Intn(len(peer.torrent.pieces[piece].blocks))
 		}
 
