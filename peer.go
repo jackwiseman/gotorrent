@@ -324,6 +324,23 @@ func (peer *Peer) requestPieces() error {
 	return nil
 }
 
+// trim any pieces from the queue that are either verified or have been readded to the torrent's queue due to a failed hash check
+func (peer *Peer) updatePieceQueue() {
+	peer.pieceQueue.piecesMX.Lock()
+	defer peer.pieceQueue.piecesMX.Unlock()
+
+	var removed int
+
+	for i := 0; i < len(peer.pieceQueue.pieces); i++ {
+		if peer.torrent.hasPiece(peer.pieceQueue.pieces[i-removed]) || peer.torrent.pieceQueue.contains(peer.pieceQueue.pieces[i-removed]) {
+			delete(peer.pieceQueue.pieceMap, peer.pieceQueue.pieces[i-removed])
+			peer.pieceQueue.pieces = append(peer.pieceQueue.pieces[0:i-removed], peer.pieceQueue.pieces[i-removed+1:]...)
+			removed++
+		}
+	}
+	return
+}
+
 // Return true if peer's bitfield indicates that they have the inputed piece
 func (peer *Peer) hasPiece(pieceNum int) bool {
 	return bitIsSet(peer.bitfield, pieceNum)
