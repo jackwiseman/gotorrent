@@ -57,11 +57,16 @@ func (pw *PeerWriter) stop() {
 }
 
 // request specified metadata piece
-func (pw *PeerWriter) sendMetadataRequest() {
-	piece := pw.peer.torrent.getRandMetadataPiece()
+func (pw *PeerWriter) sendMetadataRequest() error {
+	piece, err := pw.peer.torrent.getRandMetadataPiece()
+	if err != nil {
+		return err
+	}
 	payload := encodeMetadataRequest(piece)
 	// marshall will ensure the length_prefix is set, we don't need to specify it here
 	pw.writeExtended(ExtendedMessage{0, 20, uint8(pw.peer.extensions["ut_metadata"]), []byte(payload)})
+
+	return nil
 }
 
 func (pw *PeerWriter) keepAliveScheduler() {

@@ -27,8 +27,9 @@ type Torrent struct {
 	maxPeers int
 
 	// Metadata-specific
-	metadataSize   int // in bytes, given by first extended handshake
-	metadataRaw    []byte
+	metadataSize int // in bytes, given by first extended handshake
+	metadataRaw  []byte
+	// NOTE: not sure if metadataPieces and obtainedBlocks are overcomplications or not yet
 	metadataPieces []byte // array of [1/0, 1/0,...] denoting whether we have the piece or not
 	metadata       Metadata
 	metadataMx     sync.Mutex // to ensure that that we only trigger "building" the metadata once
@@ -264,7 +265,12 @@ func (torrent *Torrent) startDownload() {
 func (torrent *Torrent) torrentBlockHandler() {
 	for {
 		ch := <-torrent.torrentBlockCH
-		if torrent.hasBlock(ch.pieceIndex, ch.offset) {
+		hasBlock, err := torrent.hasBlock(ch.pieceIndex, ch.offset)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		if hasBlock {
 			torrent.logger.Println("Bad block")
 			continue
 		}
@@ -297,7 +303,7 @@ func (torrent *Torrent) torrentBlockHandler() {
 				torrent.pieces[ch.pieceIndex].numSet = 0
 				torrent.numBlocksDownloaded -= len(torrent.pieces[ch.pieceIndex].blocks)
 				torrent.pieceQueue.push(ch.pieceIndex)
-				torrent.logger.Printf("%v failed check: \n + %v\n - %v\n", ch.pieceIndex, torrent.pieces[ch.pieceIndex].hash, torrent.pieces[ch.pieceIndex].lastHash)
+				// torrent.logger.Printf("%v failed check: \n + %v\n - %v\n", ch.pieceIndex, torrent.pieces[ch.pieceIndex].hash, torrent.pieces[ch.pieceIndex].lastHash)
 			} else {
 				torrent.pieces[ch.pieceIndex].isVerified = true
 				torrent.numPiecesDownloaded++
@@ -316,13 +322,23 @@ func (torrent *Torrent) metadataPieceHandler() {
 		if torrent.hasMetadata {
 			continue
 		}
-		if torrent.hasMetadataPiece(ch.pieceIndex) {
+		hasMetadataPiece, err := torrent.hasMetadataPiece(ch.pieceIndex)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		if hasMetadataPiece {
 			continue
 		}
 
 		torrent.setMetadataPiece(ch.pieceIndex, ch.data)
 
-		if !torrent.hasAllMetadata() {
+		hasAllMetadata, err := torrent.hasAllMetadata()
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		if !hasAllMetadata {
 			continue
 		}
 
@@ -343,9 +359,9 @@ func (torrent *Torrent) metadataPieceHandler() {
 }
 
 // hasBlock returns whether block at pieceIndex (zero indexed piece) with offset offset in bytes is set
-func (torrent *Torrent) hasBlock(pieceIndex int, offset int) bool {
+func (torrent *Torrent) hasBlock(pieceIndex int, offset int) (bool, error) {
 	if torrent.obtainedBlocks == nil {
-		return false
+		return false, nil
 	}
 	blockIndex := (pieceIndex*torrent.getNumBlocksInPiece() + (offset / BlockLen))
 	return utils.BitIsSet(torrent.obtainedBlocks, blockIndex)

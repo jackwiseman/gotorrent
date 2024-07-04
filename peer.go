@@ -297,7 +297,11 @@ func (peer *Peer) requestPieces() error {
 				return err
 			}
 
-			if peer.hasPiece(piece) {
+			hasPiece, err := peer.hasPiece(piece)
+			if err != nil {
+				return err
+			}
+			if hasPiece {
 				peer.pieceQueue.push(piece)
 				break
 			}
@@ -312,7 +316,11 @@ func (peer *Peer) requestPieces() error {
 
 		for offset := 0; offset < len(peer.torrent.pieces[piece].blocks); offset++ {
 			// Make sure we need this piece, otherwise skip it
-			if peer.torrent.hasBlock(piece, offset*BlockLen) {
+			hasBlock, err := peer.torrent.hasBlock(piece, offset*BlockLen)
+			if err != nil {
+				return err
+			}
+			if hasBlock {
 				continue
 			}
 
@@ -362,7 +370,7 @@ func (peer *Peer) updatePieceQueue() {
 }
 
 // Return true if peer's bitfield indicates that they have the inputed piece
-func (peer *Peer) hasPiece(pieceNum int) bool {
+func (peer *Peer) hasPiece(pieceNum int) (bool, error) {
 	return utils.BitIsSet(peer.bitfield, pieceNum)
 	//	return (peer.bitfield[(pieceNum/int(8))]>>(7-(pieceNum%8)))&1 == 1
 }

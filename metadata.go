@@ -36,43 +36,58 @@ func (torrent *Torrent) numMetadataPieces() int {
 	return int(math.Ceil(float64(torrent.metadataSize) / float64(BlockLen)))
 }
 
-func (torrent *Torrent) hasAllMetadata() bool {
+func (torrent *Torrent) hasAllMetadata() (bool, error) {
 	if torrent.numMetadataPieces() == 0 {
-		return false
+		return false, nil
 	}
 
 	for i := 0; i < torrent.numMetadataPieces(); i++ {
-		if !utils.BitIsSet(torrent.metadataPieces, i) {
-			return false
+		isSet, err := utils.BitIsSet(torrent.metadataPieces, i)
+		if err != nil {
+			return false, err
+		}
+
+		if !isSet {
+			return false, nil
 		}
 	}
-	return true
+	return true, nil
 }
 
-func (torrent *Torrent) getRandMetadataPiece() int {
-	if torrent.hasAllMetadata() {
-		return -1
+func (torrent *Torrent) getRandMetadataPiece() (int, error) {
+	hasAllMetadata, err := torrent.hasAllMetadata()
+	if err != nil {
+		return -1, err
 	}
-
-	// rand.Seed(time.Now().UnixNano())
+	if hasAllMetadata {
+		return -1, nil
+	}
 
 	for {
 		testPiece := rand.Intn(torrent.numMetadataPieces())
-		if !torrent.hasMetadataPiece(testPiece) {
-			return testPiece
+		hasPiece, err := torrent.hasMetadataPiece(testPiece)
+		if err != nil {
+			return -1, err
+		}
+		if !hasPiece {
+			return testPiece, nil
 		}
 	}
 }
 
-func (torrent *Torrent) hasMetadataPiece(pieceNum int) bool {
+func (torrent *Torrent) hasMetadataPiece(pieceNum int) (bool, error) {
 	if len(torrent.metadataPieces) == 0 {
-		return false
+		return false, nil
 	}
 	return utils.BitIsSet(torrent.metadataPieces, pieceNum)
 }
 
 func (torrent *Torrent) setMetadataPiece(pieceNum int, metadataPiece []byte) error {
-	if torrent.hasAllMetadata() {
+	hasAll, err := torrent.hasAllMetadata()
+	if err != nil {
+		return err
+	}
+	if hasAll {
 		return nil
 	}
 	// insert into raw byte array
