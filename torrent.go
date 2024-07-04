@@ -5,7 +5,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
-	"io/ioutil"
+	"gotorrent/utils"
 	"log"
 	"math"
 	"os"
@@ -207,7 +207,7 @@ func (torrent *Torrent) removeDuplicatePeers() {
 
 // assumes the filename is "metadata.torrent",whichof course will not be valid in the future if there are multiple torrents
 func (torrent *Torrent) parseMetadataFile() error {
-	data, err := ioutil.ReadFile("metadata.torrent")
+	data, err := os.ReadFile("metadata.torrent")
 	if err != nil {
 		return err
 	}
@@ -282,7 +282,7 @@ func (torrent *Torrent) torrentBlockHandler() {
 
 		// Mark this block as 'have'
 		blockIndex := (ch.pieceIndex*torrent.getNumBlocksInPiece() + (ch.offset / BlockLen))
-		setBit(&torrent.obtainedBlocks, blockIndex)
+		utils.SetBit(&torrent.obtainedBlocks, blockIndex)
 
 		torrent.numBlocksDownloaded++
 
@@ -291,7 +291,7 @@ func (torrent *Torrent) torrentBlockHandler() {
 			if !torrent.pieces[ch.pieceIndex].verify() {
 				// redownload this entire piece
 				for i := 0; i < len(torrent.pieces[ch.pieceIndex].blocks); i++ {
-					unsetBit(&torrent.obtainedBlocks, ch.pieceIndex*torrent.getNumBlocksInPiece()+i)
+					utils.UnsetBit(&torrent.obtainedBlocks, ch.pieceIndex*torrent.getNumBlocksInPiece()+i)
 				}
 				// reset numSet and total numBlocksDownloaded, add back to pieceQueue
 				torrent.pieces[ch.pieceIndex].numSet = 0
@@ -331,7 +331,7 @@ func (torrent *Torrent) metadataPieceHandler() {
 		if bytes.Compare(checksum[:], torrent.infoHash) != 0 {
 			fmt.Println("Metadata failed infohash check, retrying")
 			for i := 0; i < torrent.numMetadataPieces(); i++ {
-				unsetBit(&torrent.metadataRaw, i)
+				utils.UnsetBit(&torrent.metadataRaw, i)
 			}
 			continue
 		}
@@ -348,7 +348,7 @@ func (torrent *Torrent) hasBlock(pieceIndex int, offset int) bool {
 		return false
 	}
 	blockIndex := (pieceIndex*torrent.getNumBlocksInPiece() + (offset / BlockLen))
-	return bitIsSet(torrent.obtainedBlocks, blockIndex)
+	return utils.BitIsSet(torrent.obtainedBlocks, blockIndex)
 }
 
 // returns whether the torrent has the hash-verified piece at index pieceIndex

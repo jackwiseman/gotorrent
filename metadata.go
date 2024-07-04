@@ -3,11 +3,11 @@ package main
 import (
 	"errors"
 	"fmt"
+	"gotorrent/utils"
 	"math"
 	"math/rand"
 	"os"
 	"strconv"
-	"time"
 )
 
 // Metadata stores the torrent's metadata, since we don't deal with .torrent files
@@ -42,7 +42,7 @@ func (torrent *Torrent) hasAllMetadata() bool {
 	}
 
 	for i := 0; i < torrent.numMetadataPieces(); i++ {
-		if !bitIsSet(torrent.metadataPieces, i) {
+		if !utils.BitIsSet(torrent.metadataPieces, i) {
 			return false
 		}
 	}
@@ -54,7 +54,7 @@ func (torrent *Torrent) getRandMetadataPiece() int {
 		return -1
 	}
 
-	rand.Seed(time.Now().UnixNano())
+	// rand.Seed(time.Now().UnixNano())
 
 	for {
 		testPiece := rand.Intn(torrent.numMetadataPieces())
@@ -68,7 +68,7 @@ func (torrent *Torrent) hasMetadataPiece(pieceNum int) bool {
 	if len(torrent.metadataPieces) == 0 {
 		return false
 	}
-	return bitIsSet(torrent.metadataPieces, pieceNum)
+	return utils.BitIsSet(torrent.metadataPieces, pieceNum)
 }
 
 func (torrent *Torrent) setMetadataPiece(pieceNum int, metadataPiece []byte) error {
@@ -86,7 +86,7 @@ func (torrent *Torrent) setMetadataPiece(pieceNum int, metadataPiece []byte) err
 	torrent.metadataRaw = append(torrent.metadataRaw, temp...)
 
 	// set as "have"
-	setBit(&torrent.metadataPieces, pieceNum)
+	utils.SetBit(&torrent.metadataPieces, pieceNum)
 
 	return nil
 }

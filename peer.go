@@ -3,10 +3,9 @@ package main
 import (
 	"encoding/binary"
 	"errors"
+	"gotorrent/utils"
 	"io"
-	"io/ioutil"
 	"log"
-	"math/rand"
 	"net"
 	"strconv"
 	"sync"
@@ -58,11 +57,11 @@ func newPeer(ip string, port string, torrent *Torrent) *Peer {
 	peer.torrent = torrent
 	peer.choked = true
 	peer.logger = log.New(peer.torrent.logFile, "[Peer] "+peer.ip+": ", log.Ltime|log.Lshortfile)
-	peer.logger.SetOutput(ioutil.Discard)
+	peer.logger.SetOutput(io.Discard)
 	peer.status = Unknown // implied by default
 	peer.pieceQueue = newPieceQueue(0, false)
 
-	rand.Seed(time.Now().UnixNano())
+	// rand.Seed(time.Now().UnixNano())
 	return &peer
 }
 
@@ -364,6 +363,6 @@ func (peer *Peer) updatePieceQueue() {
 
 // Return true if peer's bitfield indicates that they have the inputed piece
 func (peer *Peer) hasPiece(pieceNum int) bool {
-	return bitIsSet(peer.bitfield, pieceNum)
+	return utils.BitIsSet(peer.bitfield, pieceNum)
 	//	return (peer.bitfield[(pieceNum/int(8))]>>(7-(pieceNum%8)))&1 == 1
 }

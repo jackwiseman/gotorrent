@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/binary"
 	"errors"
+	"gotorrent/utils"
 	"math"
 	"net"
 	"strconv"
@@ -45,7 +46,7 @@ func (tracker *Tracker) disconnect() error {
 func (tracker *Tracker) setConnectionID() error {
 	for i := 0; i <= tracker.retries; i++ {
 		// Create a new Connection_Request with a new transactionID
-		transactionID, err := getTransactionID()
+		transactionID, err := utils.GetTransactionID()
 		if err != nil {
 			return (err)
 		}
@@ -112,7 +113,7 @@ func (tracker *Tracker) setConnectionID() error {
 // returns # of seeders
 func (tracker *Tracker) announce(torrent *Torrent, numWant int) (int, error) {
 	for i := 0; i <= tracker.retries; i++ {
-		transactionID, err := getTransactionID()
+		transactionID, err := utils.GetTransactionID()
 		if err != nil {
 			return 0, err
 		}

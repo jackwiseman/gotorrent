@@ -4,7 +4,6 @@ import (
 	"errors"
 	"math/rand"
 	"sync"
-	"time"
 )
 
 // PieceQueue allows for goroutine-safe piece fetching to reduce piece collisions among peers and faster piece selection
@@ -57,7 +56,7 @@ func newPieceQueue(size int, shuffle bool) *PieceQueue {
 	}
 
 	if shuffle {
-		rand.Seed(time.Now().UnixNano())
+		// rand.Seed(time.Now().UnixNano()) // deprecated
 		rand.Shuffle(len(pq.pieces), func(i, j int) { pq.pieces[i], pq.pieces[j] = pq.pieces[j], pq.pieces[i] })
 	}
 
