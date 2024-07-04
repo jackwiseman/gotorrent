@@ -154,7 +154,7 @@ func (torrent *Torrent) String() {
 func (torrent *Torrent) findPeers() {
 	var wg sync.WaitGroup
 
-	fmt.Println("Contacting trackers...")
+	fmt.Println(fmt.Sprintf("Contacting %d trackers...", len(torrent.trackers)))
 	// TODO: fix bad trackers?
 	for i := 0; i < len(torrent.trackers); i++ {
 		wg.Add(1)
