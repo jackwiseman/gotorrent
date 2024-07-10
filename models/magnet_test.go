@@ -12,8 +12,8 @@ func TestNewMagnet(t *testing.T) {
 		expectsError bool
 	}{
 		{
-			testLink:     "magnet:?xt=urn:btih:fffffffffffffffffffffffffffffffffffffff&tr=https%3A%2F%example.com",
-			expected:     Magnet{Name: "", Trackers: []string{"https://example.com"}},
+			testLink:     "magnet:?xt=urn:btih:fffffffffffffffffffffffffffffffffffffff&dn=example&tr=https://example.com",
+			expected:     Magnet{DisplayName: "example", Trackers: []string{"https://example.com"}, ExactTopic: "btih:fffffffffffffffffffffffffffffffffffffff"},
 			expectsError: false,
 		},
 	}
