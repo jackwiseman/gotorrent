@@ -1,6 +1,6 @@
 <div align="center">
 	<h1>GoTorrent</h1>
-	<p>A CLI Bittorrent Client written in GoLang</p>
+	<p>A CLI Bittorrent Client written in Go</p>
 	<p>Note: This project is currently under development and issues should be expected</p>
 </div>
 
