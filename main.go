@@ -1,10 +1,19 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
-	"strconv"
 )
+
+// var seed bool
+var connections int
+
+func init() {
+	// flag.BoolVar(&seed, "seed", false, "continue seeding after download")
+	flag.IntVar(&connections, "connections", 50, "number of connections to use")
+	flag.Parse()
+}
 
 func main() {
 	// flush current debug log
@@ -16,18 +25,13 @@ func main() {
 	connections := 50
 	var magnetLink string
 
-	switch len(os.Args) {
-	case 2:
-		magnetLink = os.Args[1]
-	case 3:
-		magnetLink = os.Args[1]
-		connections, err = strconv.Atoi(os.Args[2])
-		if err != nil {
-			panic(err)
-		}
-	default:
-		fmt.Printf("Usage: ./main {magnet link} {optional # conections}\n")
+	if len(os.Args) < 2 {
+		fmt.Printf("Provide a magnet link\n")
+		return
 	}
+
+	// TODO: validate
+	magnetLink = os.Args[1]
 
 	torr := newTorrent(magnetLink, connections)
 	torr.startDownload()
