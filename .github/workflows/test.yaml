@@ -1,0 +1,8 @@
+jobs:
+  run-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: run all tests
+      - run: |
+          go test ./...
