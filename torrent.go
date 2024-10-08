@@ -74,7 +74,7 @@ func newTorrent(magnetLink string, maxPeers int) *Torrent {
 	torrent.logFile, _ = os.Create("debug.log")
 	torrent.magLink = magnetLink
 	torrent.maxPeers = maxPeers
-	torrent.parseMagnetLink()
+	// torrent.parseMagnetLink()
 	torrent.connHandler = torrent.newConnHandler()
 	torrent.isDownloaded = false
 	torrent.logger = log.New(torrent.logFile, "[Torrent Info]: ", log.Ltime)
