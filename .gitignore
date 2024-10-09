@@ -2,6 +2,7 @@
 *.log
 
 main
+gotorrent
 magnet_links.go
 
 downloads/
