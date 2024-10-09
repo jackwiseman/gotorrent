@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"gotorrent/models"
 	"os"
 )
 
@@ -22,17 +23,13 @@ func main() {
 		fmt.Println("[WARN] no debug.log found")
 	}
 
-	connections := 50
-	var magnetLink string
-
 	if len(os.Args) < 2 {
 		fmt.Printf("Provide a magnet link\n")
 		return
 	}
+	magnetLink, err := models.NewMagnet(os.Args[1])
 
-	// TODO: validate
-	magnetLink = os.Args[1]
+	torr := models.NewTorrent(magnetLink, connections)
 
-	torr := newTorrent(magnetLink, connections)
-	torr.startDownload()
+	torr.StartDownload()
 }

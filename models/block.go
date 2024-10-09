@@ -1,4 +1,4 @@
-package main
+package models
 
 // BlockLen is the default 16KiB block length
 const BlockLen = 16 * 1024

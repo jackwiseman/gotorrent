@@ -1,4 +1,4 @@
-package main
+package models
 
 import (
 	"encoding/binary"
@@ -20,7 +20,7 @@ type Tracker struct {
 }
 
 // return a new tracker from a string representing the link
-func newTracker(link string) *Tracker {
+func NewTracker(link string) *Tracker {
 	return &Tracker{link: link, timeout: 15 * time.Second, retries: 1}
 }
 

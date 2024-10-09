@@ -8,12 +8,11 @@ import (
 
 type Magnet struct {
 	DisplayName string
-	Trackers    []string
+	Trackers    []*Tracker
 	ExactTopic  string
 }
 
 func NewMagnet(linkRaw string) (*Magnet, error) {
-
 	var ml Magnet
 
 	link, err := url.Parse(linkRaw)
@@ -27,6 +26,7 @@ func NewMagnet(linkRaw string) (*Magnet, error) {
 
 	params := link.Query()
 
+	// all params can be found here: https://en.wikipedia.org/wiki/Magnet_URI_scheme
 	xt, ok := params["xt"]
 	if !ok {
 		return nil, errors.New("magnet is missing xt param")
@@ -45,14 +45,18 @@ func NewMagnet(linkRaw string) (*Magnet, error) {
 	ml.ExactTopic = xtParsed.Opaque
 
 	displayNames := params["dn"]
-	if len(displayNames) != 1 {
-		return nil, errors.New(fmt.Sprintf("displayNames has wrong number of values, 1 expected, %d received", len(displayNames)))
+	if len(displayNames) == 1 {
+		ml.DisplayName = displayNames[0]
 	}
-	ml.DisplayName = displayNames[0]
 
 	trackers := params["tr"]
-	if len(trackers) > 0 {
-		ml.Trackers = trackers
+	ml.Trackers = make([]*Tracker, 0)
+	for _, trackerUrl := range trackers {
+		ml.Trackers = append(ml.Trackers, NewTracker(trackerUrl))
+	}
+
+	for _, t := range ml.Trackers {
+		fmt.Println(t)
 	}
 
 	return &ml, nil

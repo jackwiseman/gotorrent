@@ -1,9 +1,10 @@
-package main
+package models
 
 import (
 	"bytes"
 	"crypto/sha1"
 	"fmt"
+
 	"gotorrent/utils"
 	"log"
 	"math"
@@ -20,7 +21,7 @@ type Torrent struct {
 	name     string
 	infoHash []byte // Sha1 hash with const size 20
 
-	trackers []Tracker
+	trackers []*Tracker
 	peers    []Peer // all peers collected by the tracker, not necessarily connected
 	maxPeers int
 
@@ -51,6 +52,8 @@ type Torrent struct {
 	torrentBlockCH  chan TorrentBlock
 	metadataPieceCH chan MetadataPiece
 
+	magnet *Magnet
+
 	logger *log.Logger
 }
 
@@ -69,15 +72,19 @@ type MetadataPiece struct {
 }
 
 // for simplicity, only magnet links will be supportd for no
-func newTorrent(magnetLink string, maxPeers int) *Torrent {
+func NewTorrent(magnet *Magnet, maxPeers int) *Torrent {
 	var torrent Torrent
-	torrent.logFile, _ = os.Create("debug.log")
-	torrent.magLink = magnetLink
 	torrent.maxPeers = maxPeers
-	// torrent.parseMagnetLink()
-	torrent.connHandler = torrent.newConnHandler()
-	torrent.isDownloaded = false
+
+	torrent.name = magnet.DisplayName
+	torrent.trackers = magnet.Trackers
+
+	torrent.connHandler = newConnHandler(&torrent)
+
+	// logging
+	torrent.logFile, _ = os.Create("debug.log")
 	torrent.logger = log.New(torrent.logFile, "[Torrent Info]: ", log.Ltime)
+
 	torrent.torrentBlockCH = make(chan TorrentBlock)
 	torrent.metadataPieceCH = make(chan MetadataPiece)
 
@@ -141,7 +148,7 @@ func (torrent *Torrent) findPeers() {
 			if err != nil {
 				panic(err)
 			}
-		}(&wg, torrent.trackers[i])
+		}(&wg, *torrent.trackers[i])
 	}
 	wg.Wait()
 
@@ -205,7 +212,7 @@ func (torrent *Torrent) parseMetadataFile() error {
 }
 
 // "main" function of a torrent
-func (torrent *Torrent) startDownload() {
+func (torrent *Torrent) StartDownload() {
 	// get num_want peers and store in masterlist of peers
 	torrent.findPeers()
 

@@ -1,4 +1,4 @@
-package main
+package models
 
 import (
 	"log"
@@ -16,7 +16,7 @@ type ConnectionHandler struct {
 	logger *log.Logger
 }
 
-func (torrent *Torrent) newConnHandler() *ConnectionHandler {
+func newConnHandler(torrent *Torrent) *ConnectionHandler {
 	var ch ConnectionHandler
 	ch.torrent = torrent
 	ch.doneChan = make(chan *Peer)
