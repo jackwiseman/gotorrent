@@ -22,13 +22,6 @@ func init() {
 }
 
 func main() {
-	// flush current debug log
-	// TODO: deprecate all debug logs
-	err := os.Remove("debug.log")
-	if err != nil {
-		fmt.Println("[WARN] no debug.log found")
-	}
-
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	if debug {
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
@@ -40,6 +33,9 @@ func main() {
 		return
 	}
 	magnetLink, err := models.NewMagnet(os.Args[1])
+	if err != nil {
+		panic(err)
+	}
 
 	torr := models.NewTorrent(magnetLink, connections)
 

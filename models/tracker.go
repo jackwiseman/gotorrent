@@ -26,6 +26,7 @@ type Tracker struct {
 
 // return a new tracker from a string representing the link
 func NewTracker(link url.URL) *Tracker {
+	// TODO: validate udp/tcp
 	return &Tracker{link: link, timeout: 15 * time.Second, retries: 1}
 }
 
@@ -64,17 +65,23 @@ func (tracker *Tracker) FindPeers(torrent *Torrent, wg *sync.WaitGroup) {
 
 // for now, only works for udp links, which seem to be standard
 func (tracker *Tracker) connect() error {
-	// limit to udp for now
-	if tracker.link.Scheme != "udp" {
-		log.Warn().Msg(fmt.Sprintf("skipping %s of type %s (unsupported)", tracker.link.String(), tracker.link.Scheme))
-		return errors.New("only udp trackers are currently supported")
+	var connectionMethod string
+
+	switch tracker.link.Scheme {
+	case "http", "https":
+		connectionMethod = "tcp"
+	case "udp":
+		connectionMethod = "udp"
+	default:
+		return errors.New("unsupported tracker protocol")
 	}
 
-	conn, err := net.DialTimeout(tracker.link.Scheme, tracker.link.Host, tracker.timeout)
+	conn, err := net.DialTimeout(connectionMethod, tracker.link.Host, tracker.timeout)
 	if err != nil {
-		return (err)
+		return err
 	}
 	tracker.conn = conn
+
 	return nil
 }
 
