@@ -23,7 +23,7 @@ func init() {
 
 func main() {
 	// flush current debug log
-	// TODO: deprecate old debug logs
+	// TODO: deprecate all debug logs
 	err := os.Remove("debug.log")
 	if err != nil {
 		fmt.Println("[WARN] no debug.log found")

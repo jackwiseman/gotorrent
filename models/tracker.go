@@ -6,13 +6,15 @@ import (
 	"gotorrent/utils"
 	"math"
 	"net"
+	"net/url"
 	"strconv"
+	"sync"
 	"time"
 )
 
 // Tracker is a database which returns peers in a swarm when given a torrent hash
 type Tracker struct {
-	link         string
+	link         url.URL
 	conn         net.Conn
 	timeout      time.Duration // default is 15 seconds
 	connectionID uint64
@@ -20,13 +22,49 @@ type Tracker struct {
 }
 
 // return a new tracker from a string representing the link
-func NewTracker(link string) *Tracker {
+func NewTracker(link url.URL) *Tracker {
 	return &Tracker{link: link, timeout: 15 * time.Second, retries: 1}
+}
+
+// send 2x announce requests to all trackers, the first to find out how many peers they have,
+// the second to request that many, so that we have a large pool to pull from
+func (tracker *Tracker) FindPeers(torrent *Torrent, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	err := tracker.connect()
+
+	if err != nil {
+		return
+	}
+
+	err = tracker.setConnectionID()
+	if err != nil {
+		return
+	}
+
+	seeders, err := tracker.announce(torrent, 0)
+	if err != nil {
+		return
+	}
+
+	_, err = tracker.announce(torrent, seeders)
+	if err != nil {
+		return
+	}
+	err = tracker.disconnect()
+	if err != nil {
+		panic(err)
+	}
 }
 
 // for now, only works for udp links, which seem to be standard
 func (tracker *Tracker) connect() error {
-	conn, err := net.DialTimeout("udp", tracker.link, tracker.timeout)
+	// limit to udp for now
+	if tracker.link.Scheme != "udp" {
+		return errors.New("only udp trackers are currently supported")
+	}
+
+	conn, err := net.DialTimeout(tracker.link.Scheme, tracker.link.Host, tracker.timeout)
 	if err != nil {
 		return (err)
 	}

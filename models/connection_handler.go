@@ -1,7 +1,9 @@
 package models
 
 import (
-	"log"
+	"fmt"
+
+	"github.com/rs/zerolog/log"
 )
 
 // ConnectionHandler runs once we have a list of non-duplicate peers, connecting to those peers and managing their connections
@@ -13,19 +15,20 @@ type ConnectionHandler struct {
 	// channel for peers to notify connection handler that they've disconnected, allows us to not just run in a ticker
 	doneChan chan *Peer
 
-	logger *log.Logger
+	// logger *log.Logger
 }
 
 func newConnHandler(torrent *Torrent) *ConnectionHandler {
 	var ch ConnectionHandler
 	ch.torrent = torrent
 	ch.doneChan = make(chan *Peer)
-	ch.logger = log.New(torrent.logFile, "[Connection Handler] ", log.Ltime|log.Lshortfile)
+	// ch.logger = log.New(torrent.logFile, "[Connection Handler] ", log.Ltime|log.Lshortfile)
 	//	ch.logger.SetOutput(io.Discard)
 	return &ch
 }
 
 func (ch *ConnectionHandler) run() {
+	defer log.Info().Msg("Finished running")
 	//	defer ch.logger.Println("Finished running")
 
 	for {
@@ -53,6 +56,7 @@ func (ch *ConnectionHandler) run() {
 				go ch.activeConns[len(ch.activeConns)-1].run(ch.doneChan)
 			}
 		}
+		log.Info().Msg(fmt.Sprintf("Bad: %d Alive: %d Total: %d\n", badPeers, alivePeers, len(ch.torrent.peers)))
 		//		ch.logger.Printf("Bad: %d Alive: %d Total: %d\n", badPeers, alivePeers, len(ch.torrent.peers))
 		//		ch.logger.Println("------------------------")
 		ch.removeConnection(<-ch.doneChan) // block until someone disconnects

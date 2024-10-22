@@ -96,7 +96,7 @@ func (torrent *Torrent) String() {
 	fmt.Println("Magnet: " + torrent.magLink)
 	fmt.Println("Trackers:")
 	for i := 0; i < len(torrent.trackers); i++ {
-		fmt.Println(" -- " + torrent.trackers[i].link)
+		fmt.Println(" -- " + torrent.trackers[i].link.Host)
 	}
 	fmt.Println("Known peers:")
 	if len(torrent.peers) == 0 {
@@ -120,35 +120,10 @@ func (torrent *Torrent) findPeers() {
 
 	fmt.Println(fmt.Sprintf("Contacting %d trackers...", len(torrent.trackers)))
 	// TODO: fix bad trackers?
-	for i := 0; i < len(torrent.trackers); i++ {
+
+	for _, tracker := range torrent.trackers {
 		wg.Add(1)
-		go func(wg *sync.WaitGroup, tracker Tracker) {
-			defer wg.Done()
-
-			err := tracker.connect()
-			if err != nil {
-				return
-			}
-
-			err = tracker.setConnectionID()
-			if err != nil {
-				return
-			}
-
-			seeders, err := tracker.announce(torrent, 0)
-			if err != nil {
-				return
-			}
-
-			_, err = tracker.announce(torrent, seeders)
-			if err != nil {
-				return
-			}
-			err = tracker.disconnect()
-			if err != nil {
-				panic(err)
-			}
-		}(&wg, *torrent.trackers[i])
+		go tracker.FindPeers(torrent, &wg)
 	}
 	wg.Wait()
 

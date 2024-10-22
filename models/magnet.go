@@ -52,7 +52,12 @@ func NewMagnet(linkRaw string) (*Magnet, error) {
 	trackers := params["tr"]
 	ml.Trackers = make([]*Tracker, 0)
 	for _, trackerUrl := range trackers {
-		ml.Trackers = append(ml.Trackers, NewTracker(trackerUrl))
+		// convert raw url string to url.URL
+		url, err := url.Parse(trackerUrl)
+		if err != nil {
+			return nil, err
+		}
+		ml.Trackers = append(ml.Trackers, NewTracker(*url))
 	}
 
 	for _, t := range ml.Trackers {
