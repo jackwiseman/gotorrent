@@ -3,6 +3,7 @@ package models
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"gotorrent/utils"
 	"math"
 	"net"
@@ -10,6 +11,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/rs/zerolog/log"
 )
 
 // Tracker is a database which returns peers in a swarm when given a torrent hash
@@ -47,10 +50,12 @@ func (tracker *Tracker) FindPeers(torrent *Torrent, wg *sync.WaitGroup) {
 		return
 	}
 
-	_, err = tracker.announce(torrent, seeders)
+	numSeeders, err := tracker.announce(torrent, seeders)
 	if err != nil {
 		return
 	}
+	log.Info().Msg(fmt.Sprintf("tracker %s has %d seeders", tracker.link.String(), numSeeders))
+
 	err = tracker.disconnect()
 	if err != nil {
 		panic(err)
@@ -61,6 +66,7 @@ func (tracker *Tracker) FindPeers(torrent *Torrent, wg *sync.WaitGroup) {
 func (tracker *Tracker) connect() error {
 	// limit to udp for now
 	if tracker.link.Scheme != "udp" {
+		log.Warn().Msg(fmt.Sprintf("skipping %s of type %s (unsupported)", tracker.link.String(), tracker.link.Scheme))
 		return errors.New("only udp trackers are currently supported")
 	}
 

@@ -6,13 +6,13 @@ import (
 	"fmt"
 
 	"gotorrent/utils"
-	"log"
 	"math"
 	"os"
 	"strconv"
 	"sync"
 
 	bencode "github.com/jackpal/bencode-go"
+	"github.com/rs/zerolog/log"
 )
 
 // Torrent stores all data about a torrent generated from a magnet link
@@ -44,8 +44,6 @@ type Torrent struct {
 	hasMetadata  bool // set to true once metadata is built
 	downloadedMx sync.Mutex
 
-	logFile *os.File
-
 	connHandler *ConnectionHandler
 	progressBar Bar
 
@@ -53,8 +51,6 @@ type Torrent struct {
 	metadataPieceCH chan MetadataPiece
 
 	magnet *Magnet
-
-	logger *log.Logger
 }
 
 // TODO: update names to avoid confusion
@@ -80,10 +76,6 @@ func NewTorrent(magnet *Magnet, maxPeers int) *Torrent {
 	torrent.trackers = magnet.Trackers
 
 	torrent.connHandler = newConnHandler(&torrent)
-
-	// logging
-	torrent.logFile, _ = os.Create("debug.log")
-	torrent.logger = log.New(torrent.logFile, "[Torrent Info]: ", log.Ltime)
 
 	torrent.torrentBlockCH = make(chan TorrentBlock)
 	torrent.metadataPieceCH = make(chan MetadataPiece)
@@ -118,8 +110,7 @@ func (torrent *Torrent) String() {
 func (torrent *Torrent) findPeers() {
 	var wg sync.WaitGroup
 
-	fmt.Println(fmt.Sprintf("Contacting %d trackers...", len(torrent.trackers)))
-	// TODO: fix bad trackers?
+	log.Info().Msg(fmt.Sprintf("Contacting %d trackers...", len(torrent.trackers)))
 
 	for _, tracker := range torrent.trackers {
 		wg.Add(1)
@@ -210,11 +201,8 @@ func (torrent *Torrent) torrentBlockHandler() {
 			return
 		}
 		if hasBlock {
-			torrent.logger.Println("Bad block")
 			continue
 		}
-
-		torrent.logger.Println("Block received")
 
 		if ch.pieceIndex >= len(torrent.pieces) || ch.offset/BlockLen >= len(torrent.pieces[ch.pieceIndex].blocks) {
 			// bad data
@@ -242,11 +230,9 @@ func (torrent *Torrent) torrentBlockHandler() {
 				torrent.pieces[ch.pieceIndex].numSet = 0
 				torrent.numBlocksDownloaded -= len(torrent.pieces[ch.pieceIndex].blocks)
 				torrent.pieceQueue.push(ch.pieceIndex)
-				// torrent.logger.Printf("%v failed check: \n + %v\n - %v\n", ch.pieceIndex, torrent.pieces[ch.pieceIndex].hash, torrent.pieces[ch.pieceIndex].lastHash)
 			} else {
 				torrent.pieces[ch.pieceIndex].isVerified = true
 				torrent.numPiecesDownloaded++
-				torrent.logger.Printf("Index: %v is set\n", ch.pieceIndex)
 			}
 		}
 

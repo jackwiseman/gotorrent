@@ -4,22 +4,18 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
-	"log"
 	"sync"
 	"time"
 )
 
 // PeerReader reads from the peer's connection and parses the messages
 type PeerReader struct {
-	peer   *Peer
-	logger *log.Logger
+	peer *Peer
 }
 
 func newPeerReader(peer *Peer) *PeerReader {
 	var pr PeerReader
 	pr.peer = peer
-	pr.logger = log.New(peer.torrent.logFile, "[Peer Reader] "+pr.peer.ip+": ", log.Ltime|log.Lshortfile)
-	pr.logger.SetOutput(io.Discard)
 	return &pr
 }
 
@@ -55,7 +51,6 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 		messageIDBuf := make([]byte, 1)
 		_, err = pr.peer.conn.Read(messageIDBuf)
 		if err != nil {
-			pr.logger.Println(err)
 			return
 		}
 
@@ -80,7 +75,6 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 			pieceIndexBuf := make([]byte, 4)
 			_, err = io.ReadFull(pr.peer.conn, pieceIndexBuf)
 			if err != nil {
-				pr.logger.Println(err)
 				return
 			}
 			// A malicious peer may send a HAVE message with a piece we'll never download
@@ -89,7 +83,6 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 			bitfieldBuf := make([]byte, lengthPrefix-1)
 			_, err = pr.peer.conn.Read(bitfieldBuf)
 			if err != nil {
-				pr.logger.Println(err)
 				return
 			}
 			pr.peer.bitfield = bitfieldBuf
@@ -99,7 +92,6 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 
 			_, err = pr.peer.conn.Read(payloadBuf)
 			if err != nil {
-				pr.logger.Println(err)
 				return
 			}
 		case PIECE:
@@ -112,13 +104,11 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 
 			_, err = pr.peer.conn.Read(indexBuf)
 			if err != nil {
-				pr.logger.Println(err)
 				return
 			}
 
 			_, err = pr.peer.conn.Read(beginBuf)
 			if err != nil {
-				pr.logger.Println(err)
 				return
 			}
 
@@ -129,8 +119,6 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 				// got bad data
 				return
 			}
-
-			pr.logger.Printf("Index: %d, Begin: %d (%v)", index, offset, offset/BlockLen)
 
 			blockBuf := make([]byte, lengthPrefix-9)
 			_, err = io.ReadFull(pr.peer.conn, blockBuf)
@@ -152,21 +140,18 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 
 			_, err = pr.peer.conn.Read(payloadBuf)
 			if err != nil {
-				pr.logger.Println(err)
 				return
 			}
 		case Port:
 			listenPortBuf := make([]byte, 2)
 			_, err = pr.peer.conn.Read(listenPortBuf)
 			if err != nil {
-				pr.logger.Println(err)
 				return
 			}
 		case Extended:
 			extendedIDBuf := make([]byte, 1)
 			_, err = pr.peer.conn.Read(extendedIDBuf)
 			if err != nil {
-				pr.logger.Println(err)
 				return
 			}
 
@@ -194,8 +179,6 @@ func (pr *PeerReader) run(wg *sync.WaitGroup) {
 			}
 
 			metadataPiece := payloadBuf[bencodeEnd:]
-
-			pr.logger.Println(string(bencode))
 
 			pr.peer.torrent.metadataPieceCH <- MetadataPiece{response.Piece, metadataPiece}
 

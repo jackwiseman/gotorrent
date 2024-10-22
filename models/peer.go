@@ -5,7 +5,6 @@ import (
 	"errors"
 	"gotorrent/utils"
 	"io"
-	"log"
 	"net"
 	"strconv"
 	"sync"
@@ -41,8 +40,6 @@ type Peer struct {
 	// wrapped io.Reader/io.Writer interfaces
 	pw *PeerWriter
 	pr *PeerReader
-
-	logger *log.Logger
 }
 
 func (peer *Peer) setExtensions(extensions map[string]int) {
@@ -56,8 +53,6 @@ func newPeer(ip string, port string, torrent *Torrent) *Peer {
 	peer.port = port
 	peer.torrent = torrent
 	peer.choked = true
-	peer.logger = log.New(peer.torrent.logFile, "[Peer] "+peer.ip+": ", log.Ltime|log.Lshortfile)
-	peer.logger.SetOutput(io.Discard)
 	peer.status = Unknown // implied by default
 	peer.pieceQueue = newPieceQueue(0, false)
 
@@ -76,25 +71,21 @@ func (peer *Peer) run(doneCh chan *Peer) {
 	peer.status = Alive
 	peer.choked = true
 	peer.requests = 0
-	peer.logger.Printf(" + %v", peer)
 
 	err := peer.connect()
 	if err != nil {
-		//		peer.logger.Println("Connection error: " + err.Error())
 		peer.status = Bad
 		return
 	}
 
 	err = peer.performHandshake()
 	if err != nil {
-		//		peer.logger.Println("Handshake error: " + err.Error())
 		peer.status = Bad
 		return
 	}
 
 	err = peer.getBitfield()
 	if err != nil {
-		//		peer.logger.Println("Bitfield error: " + err.Error())
 		peer.status = Bad
 		return
 	}
@@ -260,7 +251,6 @@ func (peer *Peer) getBitfield() error {
 		return err
 	}
 	peer.bitfield = bitfieldBuf
-	peer.logger.Println(peer.bitfield)
 	return nil
 }
 
@@ -311,8 +301,6 @@ func (peer *Peer) requestPieces() error {
 			//piece = rand.Intn(len(peer.torrent.pieces))
 			//offset = rand.Intn(len(peer.torrent.pieces[piece].blocks))
 		}
-
-		peer.logger.Printf("\nRequesting block %d", piece)
 
 		for offset := 0; offset < len(peer.torrent.pieces[piece].blocks); offset++ {
 			// Make sure we need this piece, otherwise skip it

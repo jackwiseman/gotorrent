@@ -2,7 +2,6 @@ package models
 
 import (
 	"bufio"
-	"log"
 	"sync"
 	"time"
 )
@@ -15,7 +14,6 @@ type PeerWriter struct {
 	writer  *bufio.Writer
 	bufSize int
 	peer    *Peer
-	logger  *log.Logger
 
 	messageCh chan []byte // probably need to initialize this?
 
@@ -29,7 +27,6 @@ func newPeerWriter(peer *Peer) *PeerWriter {
 	pw.peer = peer
 	pw.bufSize = 6 // len + id + (extension id if id == 20)
 	pw.writer = bufio.NewWriterSize(pw.peer.conn, pw.bufSize)
-	pw.logger = log.New(peer.torrent.logFile, "[Peer Writer] "+pw.peer.ip+": ", log.Ltime|log.Lshortfile)
 	pw.messageCh = make(chan []byte)
 	return &pw
 }
